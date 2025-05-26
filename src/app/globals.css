@@ -56,16 +56,16 @@ body {
   }
 
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
+    --background: 0 0% 3.9%; /* near black */
+    --foreground: 60 100% 90%; /* Light yellow text */
     --card: 0 0% 10%; /* Slightly lighter gray for dark mode cards */
-    --card-foreground: 0 0% 98%;
+    --card-foreground: 60 100% 90%; /* Light yellow text */
     --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%; /* white */
-    --primary-foreground: 0 0% 0%; /* black */
+    --popover-foreground: 60 100% 90%; /* Light yellow text */
+    --primary: 50 100% 50%; /* Bright yellow */
+    --primary-foreground: 240 10% 4%; /* Dark text for primary buttons */
     --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary-foreground: 60 100% 85%; /* Lighter yellow */
     --muted: 0 0% 14.9%;
     --muted-foreground: 0 0% 63.9%;
     --accent: 60 100% 50%; /* yellow */
@@ -83,11 +83,11 @@ body {
 
     /* Dark Sidebar specific theme */
     --sidebar-background: 0 0% 8%; /* slightly lighter black for dark mode sidebar */
-    --sidebar-foreground: 0 0% 98%; /* white */
+    --sidebar-foreground: 60 100% 90%; /* Light Yellow */
     --sidebar-primary: 60 100% 50%; /* yellow */
     --sidebar-primary-foreground: 0 0% 0%; /* black */
     --sidebar-accent: 0 0% 20%; /* slightly lighter gray for dark hover */
-    --sidebar-accent-foreground: 0 0% 98%; /* white */
+    --sidebar-accent-foreground: 50 100% 50%; /* Yellow on hover */
     --sidebar-border: 0 0% 20%; 
     --sidebar-ring: 60 100% 50%;
   }
