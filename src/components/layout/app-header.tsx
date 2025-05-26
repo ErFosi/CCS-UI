@@ -1,3 +1,4 @@
+
 "use client";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -5,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut, UserCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from 'next/image';
 
 export function AppHeader() {
   const router = useRouter();
@@ -18,8 +20,15 @@ export function AppHeader() {
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 sm:px-6 shadow-sm">
       <SidebarTrigger className="md:hidden" />
       <div className="flex flex-1 items-center justify-between">
-        <Link href="/dashboard/my-videos" className="text-xl font-semibold text-primary">
-          VideoRevive
+        <Link href="/dashboard/my-videos" className="flex items-center">
+          <Image
+            src="/logo/logo.png"
+            alt="VideoRevive Logo"
+            width={120}
+            height={67.5} // Assuming 16:9 aspect ratio, adjust if needed
+            className="rounded-sm"
+            data-ai-hint="company logo"
+          />
         </Link>
         <div className="flex items-center gap-4">
            {/* Placeholder for user profile/actions. Can be expanded later. */}

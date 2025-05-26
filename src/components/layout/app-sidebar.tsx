@@ -1,6 +1,8 @@
+
 "use client";
 
 import Link from "next/link";
+import Image from 'next/image';
 import { usePathname } from "next/navigation";
 import {
   Sidebar,
@@ -11,12 +13,12 @@ import {
   SidebarMenuButton,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Film, UploadCloud, Home, Settings, LogOut } from "lucide-react";
+import { Film, UploadCloud, LogOut } from "lucide-react"; // Film might be replaced by logo
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 
 const navItems = [
-  { href: "/dashboard/my-videos", label: "My Videos", icon: Film },
+  { href: "/dashboard/my-videos", label: "My Videos", icon: Film }, // Keeping Film icon for nav items for now
   { href: "/dashboard/upload", label: "Upload & Upscale", icon: UploadCloud },
 ];
 
@@ -28,17 +30,28 @@ export function AppSidebar() {
     router.push("/login");
   };
 
-
   return (
     <Sidebar collapsible="icon" side="left" variant="sidebar" className="border-r border-sidebar-border">
-      <SidebarHeader className="p-4 items-center justify-center">
-         {/* Could add a small logo here if needed */}
-        <Link href="/dashboard/my-videos" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
-            <Film className="h-8 w-8 text-sidebar-primary" />
-            <h1 className="text-2xl font-bold text-sidebar-foreground">VideoRevive</h1>
+      <SidebarHeader className="p-4 flex items-center justify-center">
+        <Link href="/dashboard/my-videos" className="group-data-[collapsible=icon]:hidden">
+            <Image
+              src="/logo/logo.png"
+              alt="VideoRevive Logo"
+              width={120}
+              height={67.5} // Adjust if needed for sidebar header
+              className="rounded-sm"
+              data-ai-hint="company logo"
+            />
         </Link>
-         <Link href="/dashboard/my-videos" className="items-center gap-2 hidden group-data-[collapsible=icon]:flex">
-            <Film className="h-8 w-8 text-sidebar-primary" />
+         <Link href="/dashboard/my-videos" className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
+            <Image
+              src="/logo/logo.png"
+              alt="VideoRevive Logo"
+              width={32} // Icon size for collapsed sidebar
+              height={32} // Icon size for collapsed sidebar
+              className="rounded-sm"
+              data-ai-hint="company logo"
+            />
         </Link>
       </SidebarHeader>
       <SidebarContent className="p-2">
