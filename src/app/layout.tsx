@@ -1,8 +1,10 @@
+
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google'; // Using Inter as Geist is not standard, for broad compatibility.
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { VideoProvider } from '@/context/video-context';
+import { ThemeProvider } from '@/context/theme-context';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -24,12 +26,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning> {/* suppressHydrationWarning for next-themes like behavior */}
       <body className={`${inter.variable} font-sans antialiased`}>
-        <VideoProvider>
-          {children}
-          <Toaster />
-        </VideoProvider>
+        <ThemeProvider>
+          <VideoProvider>
+            {children}
+            <Toaster />
+          </VideoProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -13,44 +13,50 @@ import {
   SidebarMenuButton,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Film, UploadCloud, LogOut } from "lucide-react"; // Film might be replaced by logo
+import { Film, UploadCloud, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { useTheme } from "@/context/theme-context";
 
 const navItems = [
-  { href: "/dashboard/my-videos", label: "My Videos", icon: Film }, // Keeping Film icon for nav items for now
+  { href: "/dashboard/my-videos", label: "My Videos", icon: Film },
   { href: "/dashboard/upload", label: "Upload & Upscale", icon: UploadCloud },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { theme } = useTheme();
 
   const handleLogout = () => {
     router.push("/login");
   };
+
+  const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
 
   return (
     <Sidebar collapsible="icon" side="left" variant="sidebar" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4 flex items-center justify-center">
         <Link href="/dashboard/my-videos" className="group-data-[collapsible=icon]:hidden">
             <Image
-              src="/logo/logo.png"
+              src={logoSrc}
               alt="VideoRevive Logo"
               width={120}
-              height={67.5} // Adjust if needed for sidebar header
+              height={67.5}
               className="rounded-sm"
-              data-ai-hint="company logo"
+              priority
+              key={theme} // Add key to force re-render on theme change for next/image
             />
         </Link>
          <Link href="/dashboard/my-videos" className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
             <Image
-              src="/logo/logo.png"
+              src={logoSrc}
               alt="VideoRevive Logo"
-              width={32} // Icon size for collapsed sidebar
-              height={32} // Icon size for collapsed sidebar
+              width={32}
+              height={32}
               className="rounded-sm"
-              data-ai-hint="company logo"
+              priority
+              key={theme + "-icon"} // Add key to force re-render
             />
         </Link>
       </SidebarHeader>

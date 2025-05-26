@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/context/theme-context"; // Import useTheme
 
 const formSchema = z.object({
   email: z.string().email({
@@ -31,6 +32,7 @@ const formSchema = z.object({
 export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
+  const { theme } = useTheme(); // Use theme from context
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -49,18 +51,21 @@ export function LoginForm() {
     router.push("/dashboard/my-videos");
   }
 
+  const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
+
   return (
     <Card className="w-full shadow-xl border-border">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 flex items-center justify-center">
           <Image
-            src="/logo/logo.png" 
+            src={logoSrc} 
             alt="Company Logo"
             width={160} 
             height={90} 
             className="rounded-sm"
             data-ai-hint="company logo"
             priority
+            key={theme} // Add key to force re-render on theme change
           />
         </div>
       </CardHeader>

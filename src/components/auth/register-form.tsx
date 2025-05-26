@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/context/theme-context"; // Import useTheme
 
 const registerFormSchema = z.object({
   email: z.string().email({
@@ -37,6 +38,7 @@ const registerFormSchema = z.object({
 export function RegisterForm() {
   const router = useRouter();
   const { toast } = useToast();
+  const { theme } = useTheme(); // Use theme from context
 
   const form = useForm<z.infer<typeof registerFormSchema>>({
     resolver: zodResolver(registerFormSchema),
@@ -57,22 +59,23 @@ export function RegisterForm() {
     });
     // In a real app, you might redirect to login or directly to dashboard
     // For now, let's assume redirect to login (which is the current page, default tab)
-    // Or, you could use router.push('/dashboard/my-videos'); if auto-login after register
-    // For simplicity, we'll just show a toast. The user is already on the auth page.
   }
+  
+  const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
 
   return (
     <Card className="w-full shadow-xl border-border">
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 flex items-center justify-center">
           <Image
-            src="/logo/logo.png" 
+            src={logoSrc} 
             alt="Company Logo"
             width={160}
             height={90}
             className="rounded-sm"
             data-ai-hint="company logo"
             priority
+            key={theme} // Add key to force re-render on theme change
           />
         </div>
       </CardHeader>

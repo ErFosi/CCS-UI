@@ -4,38 +4,15 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, UserCircle, Moon, Sun, CreditCard, Settings } from "lucide-react";
+import { LogOut, UserCircle, Moon, Sun, CreditCard } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useTheme } from "@/context/theme-context"; // Import useTheme
 
 export function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-
-  useEffect(() => {
-    const storedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
-    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const initialTheme = storedTheme || (systemPrefersDark ? "dark" : "light");
-    setTheme(initialTheme);
-    if (initialTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    if (newTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  };
+  const { theme, toggleTheme } = useTheme(); // Use theme from context
 
   const handleLogout = () => {
     // In a real app, clear session/token here
@@ -58,7 +35,6 @@ export function AppHeader() {
         </h1>
       </div>
       
-      {/* Mobile Title - Show page title if sidebar is not main content on mobile */}
       <h1 className="text-lg font-semibold text-primary md:hidden flex-1 text-center truncate">
         {getPageTitle()}
       </h1>
@@ -91,10 +67,6 @@ export function AppHeader() {
                 <span>Subscription</span>
               </Link>
             </DropdownMenuItem>
-            {/* <DropdownMenuItem className="cursor-pointer">
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Settings</span>
-            </DropdownMenuItem> */}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive hover:!text-destructive/80 focus:!text-destructive/80 focus:!bg-destructive/10">
               <LogOut className="mr-2 h-4 w-4" />
