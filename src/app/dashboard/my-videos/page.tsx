@@ -4,7 +4,7 @@ import { VideoCard } from '@/components/videos/video-card';
 import { useVideoContext } from '@/context/video-context';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { PlusCircle, VideoOff } from 'lucide-react';
+import { PlusCircle, VideoOff, UploadCloud } from 'lucide-react';
 
 export default function MyVideosPage() {
   const { videos } = useVideoContext();
