@@ -59,12 +59,12 @@ export function LoginForm() {
       <CardHeader className="text-center">
         <div className="mx-auto mb-6 flex items-center justify-center">
           <Image
-            src="https://placehold.co/120x68.png"
+            src="/logo/logo.png" 
             alt="CyberCam Security Logo"
-            width={120}
-            height={68}
+            width={120} 
+            height={68} 
             className="rounded-sm"
-            data-ai-hint="cybersecurity eye logo"
+            data-ai-hint="company logo" 
             priority
           />
         </div>
