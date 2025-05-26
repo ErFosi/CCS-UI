@@ -12,7 +12,7 @@ body {
     --background: 240 10% 4%; /* Very dark blue, almost black */
     --foreground: 60 100% 90%; /* Light yellow text */
 
-    --card: 240 8% 8%; /* Slightly lighter dark blue for cards */
+    --card: 240 5% 18%; /* Dark grayish blue - made it a bit gray */
     --card-foreground: 60 100% 90%; /* Light yellow text on cards */
 
     --popover: 240 8% 8%;
@@ -33,7 +33,7 @@ body {
     --destructive: 0 70% 50%; /* Red for destructive actions */
     --destructive-foreground: 0 0% 98%; /* Light text on destructive */
 
-    --border: 240 5% 15%; /* Dark neutral border (was yellow) */
+    --border: 240 5% 25%; /* Dark neutral border - slightly lighter to contrast with new card bg */
     --input: 240 7% 10%; /* Dark input background */
     --ring: 55 100% 55%; /* Yellow for focus rings */
     
@@ -58,7 +58,7 @@ body {
   .dark {
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
+    --card: 0 0% 10%; /* Slightly lighter gray for dark mode cards */
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 3.9%;
     --popover-foreground: 0 0% 98%;
@@ -72,7 +72,7 @@ body {
     --accent-foreground: 0 0% 0%; /* black */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
+    --border: 0 0% 20%; /* Slightly lighter border for dark mode cards */
     --input: 0 0% 14.9%;
     --ring: 60 100% 50%; /* yellow */
     --chart-1: 220 70% 50%;
