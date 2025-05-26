@@ -1,9 +1,11 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { useRouter } from "next/navigation";
+import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -15,7 +17,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Film } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -56,11 +57,19 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <Film className="h-8 w-8" />
+        <div className="mx-auto mb-6 flex items-center justify-center">
+          <Image
+            src="https://placehold.co/120x68.png"
+            alt="CyberCam Security Logo"
+            width={120}
+            height={68}
+            className="rounded-sm"
+            data-ai-hint="cybersecurity eye logo"
+            priority
+          />
         </div>
-        <CardTitle className="text-3xl font-bold">VideoRevive</CardTitle>
-        <CardDescription>Welcome back! Sign in to upscale your videos.</CardDescription>
+        <CardTitle className="text-3xl font-bold">CyberCam Security</CardTitle>
+        <CardDescription>Sharper Eyes, Safer Spaces. Sign in to access your account.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -100,3 +109,4 @@ export function LoginForm() {
     </Card>
   );
 }
+
