@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 
 const registerFormSchema = z.object({
@@ -75,9 +75,8 @@ export function RegisterForm() {
             priority
           />
         </div>
-        <CardTitle className="text-2xl font-bold text-primary">Create Account</CardTitle>
       </CardHeader>
-      <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-6"> {/* Adjusted max-h and added space-y */}
+      <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
