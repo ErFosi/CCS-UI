@@ -59,12 +59,12 @@ export function LoginForm() {
       <CardHeader className="text-center">
         <div className="mx-auto mb-6 flex items-center justify-center">
           <Image
-            src="/logo/logo.png" 
+            src="/logo/logo.png"
             alt="CyberCam Security Logo"
-            width={120} 
-            height={68} 
+            width={160}
+            height={90}
             className="rounded-sm"
-            data-ai-hint="company logo" 
+            data-ai-hint="company logo"
             priority
           />
         </div>
