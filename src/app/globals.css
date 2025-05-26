@@ -33,7 +33,7 @@ body {
     --destructive: 0 70% 50%; /* Red for destructive actions */
     --destructive-foreground: 0 0% 98%; /* Light text on destructive */
 
-    --border: 50 100% 30%; /* Darker Yellow for borders */
+    --border: 240 5% 15%; /* Dark neutral border (was yellow) */
     --input: 240 7% 10%; /* Dark input background */
     --ring: 55 100% 55%; /* Yellow for focus rings */
     
@@ -101,4 +101,3 @@ body {
     @apply bg-background text-foreground;
   }
 }
-

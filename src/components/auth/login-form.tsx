@@ -55,7 +55,7 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-md shadow-xl">
+    <Card className="w-full max-w-md shadow-xl border-border">
       <CardHeader className="text-center">
         <div className="mx-auto mb-6 flex items-center justify-center">
           <Image
@@ -68,7 +68,7 @@ export function LoginForm() {
             priority
           />
         </div>
-        <CardTitle className="text-3xl font-bold">CyberCam Security</CardTitle>
+        <CardTitle className="text-3xl font-bold text-primary">CyberCam Security</CardTitle>
         <CardDescription>Sharper Eyes, Safer Spaces. Sign in to access your account.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -109,4 +109,3 @@ export function LoginForm() {
     </Card>
   );
 }
-
