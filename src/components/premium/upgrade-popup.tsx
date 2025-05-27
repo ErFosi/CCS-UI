@@ -67,4 +67,3 @@ export function UpgradePopup({ isOpen, onClose }: UpgradePopupProps) {
     </Dialog>
   );
 }
-```

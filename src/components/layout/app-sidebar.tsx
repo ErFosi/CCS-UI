@@ -45,7 +45,7 @@ export function AppSidebar() {
               height={67.5}
               className="rounded-sm"
               priority
-              key={theme} 
+              key={theme}
             />
         </Link>
          <Link href="/dashboard/my-videos" className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
@@ -56,7 +56,7 @@ export function AppSidebar() {
               height={32}
               className="rounded-sm"
               priority
-              key={theme + "-icon"} 
+              key={theme + "-icon"}
             />
         </Link>
       </SidebarHeader>
@@ -69,8 +69,8 @@ export function AppSidebar() {
                   asChild
                   isActive={pathname === item.href}
                   tooltip={{ children: item.label, side: "right", align: "center" }}
-                  className={pathname === item.href ? 
-                    "!bg-sidebar-primary !text-sidebar-primary-foreground hover:!bg-sidebar-primary/90" : 
+                  className={pathname === item.href ?
+                    "!bg-sidebar-primary !text-sidebar-primary-foreground hover:!bg-sidebar-primary/90" :
                     "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   }
                 >
@@ -85,9 +85,9 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="p-4 border-t border-sidebar-border">
-          <Button 
-            variant="ghost" 
-            onClick={handleLogout} 
+          <Button
+            variant="ghost"
+            onClick={handleLogout}
             className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-center"
             title="Logout"
             aria-label="Logout"
@@ -99,4 +99,3 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-```
