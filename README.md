@@ -1,14 +1,15 @@
-# VideoRevive UI
 
-This is the Next.js frontend application for VideoRevive, an AI-powered video upscaling service. This UI allows users to interact with the VideoRevive backend, which is expected to be running in the cloud.
+# SecureGuard AI UI
+
+This is the Next.js frontend application for SecureGuard AI, an AI-powered video censoring service. This UI allows users to interact with the SecureGuard AI backend, which is expected to be running in the cloud.
 
 ## Features
 
 - User login and registration (mocked, no actual auth).
-- Video upload (MP4) and image upload (JPEG, PNG, GIF).
-- Video preview and AI-powered upscaling from 480p to 1080p (simulated).
-- Display of original and upscaled videos.
-- Download functionality for videos.
+- Video upload (MP4).
+- Video preview and AI-powered censoring of sensitive content (simulated).
+- Display of original and censored videos.
+- Download functionality for original and censored videos.
 - Light and Dark theme support, with theme-specific logos.
 
 ## Tech Stack
@@ -70,7 +71,7 @@ This application includes a `Dockerfile` for easy containerization. The Docker b
 1.  **Build the Docker image:**
     From the root of the project, run:
     ```bash
-    docker build -t videorevive-ui \
+    docker build -t secureguard-ai-ui \
       --build-arg NEXT_PUBLIC_API_URL="http://your-production-backend-api-url.com" \
       --build-arg GOOGLE_API_KEY="your_production_google_api_key_for_build" \
       .
@@ -81,7 +82,7 @@ This application includes a `Dockerfile` for easy containerization. The Docker b
     ```bash
     docker run -p 3000:3000 \
            -e GOOGLE_API_KEY="your_production_google_api_key_for_runtime" \
-           videorevive-ui
+           secureguard-ai-ui
     ```
     - The application inside the container will run on port 3000.
     - `-p 3000:3000` maps port 3000 of the container to port 3000 on your host.
@@ -94,7 +95,7 @@ This application includes a `Dockerfile` for easy containerization. The Docker b
 This UI is designed to communicate with a backend service responsible for:
 - Actual user authentication and session management.
 - Securely storing user data and videos.
-- Performing the AI-powered video upscaling operations.
+- Performing the AI-powered video censoring operations.
 - Managing subscriptions and premium features.
 
 The backend URL should be configured using the `NEXT_PUBLIC_API_URL` environment variable, provided at build time for Docker images or in `.env.local` for local development.
@@ -115,3 +116,4 @@ The backend URL should be configured using the `NEXT_PUBLIC_API_URL` environment
 -   `Dockerfile`: For building the production Docker image.
 -   `.dockerignore`: Specifies files to exclude from the Docker build context.
 -   `next.config.ts`: Next.js configuration, including `output: 'standalone'`.
+```

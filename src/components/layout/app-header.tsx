@@ -7,23 +7,22 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { LogOut, UserCircle, Moon, Sun, CreditCard } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useTheme } from "@/context/theme-context"; // Import useTheme
+import { useTheme } from "@/context/theme-context"; 
 
 export function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
-  const { theme, toggleTheme } = useTheme(); // Use theme from context
+  const { theme, toggleTheme } = useTheme(); 
 
   const handleLogout = () => {
-    // In a real app, clear session/token here
     router.push("/login");
   };
 
   const getPageTitle = () => {
     if (pathname === "/dashboard/my-videos") return "My Videos";
-    if (pathname === "/dashboard/upload") return "Upload Multimedia";
+    if (pathname === "/dashboard/upload") return "Upload & Censor"; // Changed
     if (pathname === "/dashboard/subscription") return "Subscription";
-    return "Dashboard"; // Default title
+    return "Dashboard"; 
   };
 
   return (
@@ -41,7 +40,7 @@ export function AppHeader() {
 
       <div className="flex items-center gap-2 sm:gap-4">
         <span className="text-sm font-medium text-foreground hidden sm:inline">
-          John Doe {/* Username Placeholder */}
+          John Doe 
         </span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -78,3 +77,4 @@ export function AppHeader() {
     </header>
   );
 }
+```

@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useTheme } from "@/context/theme-context"; // Import useTheme
+import { useTheme } from "@/context/theme-context"; 
 
 const formSchema = z.object({
   email: z.string().email({
@@ -32,7 +32,7 @@ const formSchema = z.object({
 export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
-  const { theme } = useTheme(); // Use theme from context
+  const { theme } = useTheme(); 
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -59,13 +59,13 @@ export function LoginForm() {
         <div className="mx-auto mb-4 flex items-center justify-center">
           <Image
             src={logoSrc} 
-            alt="Company Logo"
+            alt="SecureGuard AI Logo"
             width={160} 
             height={90} 
             className="rounded-sm"
             data-ai-hint="company logo"
             priority
-            key={theme} // Add key to force re-render on theme change
+            key={theme} 
           />
         </div>
       </CardHeader>
@@ -107,3 +107,4 @@ export function LoginForm() {
     </Card>
   );
 }
+```

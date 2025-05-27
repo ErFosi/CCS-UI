@@ -20,7 +20,7 @@ import { useTheme } from "@/context/theme-context";
 
 const navItems = [
   { href: "/dashboard/my-videos", label: "My Videos", icon: Film },
-  { href: "/dashboard/upload", label: "Upload & Upscale", icon: UploadCloud },
+  { href: "/dashboard/upload", label: "Upload & Censor", icon: UploadCloud }, // Changed
 ];
 
 export function AppSidebar() {
@@ -40,23 +40,23 @@ export function AppSidebar() {
         <Link href="/dashboard/my-videos" className="group-data-[collapsible=icon]:hidden">
             <Image
               src={logoSrc}
-              alt="VideoRevive Logo"
+              alt="SecureGuard AI Logo" // Changed
               width={120}
               height={67.5}
               className="rounded-sm"
               priority
-              key={theme} // Add key to force re-render on theme change for next/image
+              key={theme} 
             />
         </Link>
          <Link href="/dashboard/my-videos" className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
             <Image
               src={logoSrc}
-              alt="VideoRevive Logo"
+              alt="SecureGuard AI Logo" // Changed
               width={32}
               height={32}
               className="rounded-sm"
               priority
-              key={theme + "-icon"} // Add key to force re-render
+              key={theme + "-icon"} 
             />
         </Link>
       </SidebarHeader>
@@ -99,3 +99,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+```

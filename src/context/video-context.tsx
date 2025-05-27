@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { VideoAsset } from '@/lib/types';
@@ -6,13 +7,13 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 interface VideoContextType {
   videos: VideoAsset[];
   addVideo: (video: VideoAsset) => void;
-  updateVideoStatus: (id: string, status: VideoAsset['status'], upscaledDataUri?: string, error?: string) => void;
+  updateVideoStatus: (id: string, status: VideoAsset['status'], censoredDataUri?: string, error?: string) => void;
   getVideoById: (id: string) => VideoAsset | undefined;
 }
 
 const VideoContext = createContext<VideoContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'videoReviveAppVideos';
+const LOCAL_STORAGE_KEY = 'secureGuardAIVideos'; // Updated local storage key
 
 export const VideoProvider = ({ children }: { children: ReactNode }) => {
   const [videos, setVideos] = useState<VideoAsset[]>(() => {
@@ -33,10 +34,10 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
     setVideos((prevVideos) => [video, ...prevVideos]);
   };
 
-  const updateVideoStatus = (id: string, status: VideoAsset['status'], upscaledDataUri?: string, error?: string) => {
+  const updateVideoStatus = (id: string, status: VideoAsset['status'], censoredDataUri?: string, error?: string) => {
     setVideos((prevVideos) =>
       prevVideos.map((v) =>
-        v.id === id ? { ...v, status, upscaledDataUri: upscaledDataUri ?? v.upscaledDataUri, error: error ?? v.error } : v
+        v.id === id ? { ...v, status, censoredDataUri: censoredDataUri ?? v.censoredDataUri, error: error ?? v.error } : v
       )
     );
   };
@@ -59,3 +60,4 @@ export const useVideoContext = () => {
   }
   return context;
 };
+```

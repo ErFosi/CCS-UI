@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useTheme } from "@/context/theme-context"; // Import useTheme
+import { useTheme } from "@/context/theme-context"; 
 
 const registerFormSchema = z.object({
   email: z.string().email({
@@ -32,13 +32,13 @@ const registerFormSchema = z.object({
   }),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords do not match.",
-  path: ["confirmPassword"], // Error will be displayed under confirmPassword field
+  path: ["confirmPassword"], 
 });
 
 export function RegisterForm() {
   const router = useRouter();
   const { toast } = useToast();
-  const { theme } = useTheme(); // Use theme from context
+  const { theme } = useTheme(); 
 
   const form = useForm<z.infer<typeof registerFormSchema>>({
     resolver: zodResolver(registerFormSchema),
@@ -49,16 +49,12 @@ export function RegisterForm() {
     },
   });
 
-  // Mock register handler
   function onSubmit(values: z.infer<typeof registerFormSchema>) {
-    // Simulate API call & registration
     console.log("Registration attempt with:", values);
     toast({
       title: "Registration Successful",
       description: "Redirecting to login...",
     });
-    // In a real app, you might redirect to login or directly to dashboard
-    // For now, let's assume redirect to login (which is the current page, default tab)
   }
   
   const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
@@ -69,13 +65,13 @@ export function RegisterForm() {
         <div className="mx-auto mb-4 flex items-center justify-center">
           <Image
             src={logoSrc} 
-            alt="Company Logo"
+            alt="SecureGuard AI Logo"
             width={160}
             height={90}
             className="rounded-sm"
             data-ai-hint="company logo"
             priority
-            key={theme} // Add key to force re-render on theme change
+            key={theme} 
           />
         </div>
       </CardHeader>
@@ -130,3 +126,4 @@ export function RegisterForm() {
     </Card>
   );
 }
+```

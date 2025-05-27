@@ -6,7 +6,7 @@ import { VideoCard } from '@/components/videos/video-card';
 import { useVideoContext } from '@/context/video-context';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { PlusCircle, VideoOff, UploadCloud as UploadCloudIcon } from 'lucide-react'; // Renamed to avoid conflict
+import { PlusCircle, VideoOff, UploadCloud } from 'lucide-react'; 
 import { UpgradePopup } from '@/components/premium/upgrade-popup';
 
 export default function MyVideosPage() {
@@ -14,12 +14,12 @@ export default function MyVideosPage() {
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
 
   useEffect(() => {
-    const hasSeenPopup = localStorage.getItem('hasSeenVideoReviveUpgradePopup');
+    // Changed localStorage key to be specific to new app name
+    const hasSeenPopup = localStorage.getItem('hasSeenSecureGuardAIUpgradePopup');
     if (!hasSeenPopup) {
-      // Small delay to ensure page is somewhat visible before popup
       const timer = setTimeout(() => {
         setShowUpgradePopup(true);
-        localStorage.setItem('hasSeenVideoReviveUpgradePopup', 'true');
+        localStorage.setItem('hasSeenSecureGuardAIUpgradePopup', 'true');
       }, 500);
       return () => clearTimeout(timer);
     }
@@ -47,11 +47,11 @@ export default function MyVideosPage() {
             <VideoOff className="h-20 w-20 text-muted-foreground mb-6" />
             <h2 className="text-2xl font-semibold mb-2 text-foreground">No Videos Yet</h2>
             <p className="text-muted-foreground mb-6 max-w-md">
-              It looks like you haven't uploaded or upscaled any videos. Get started by uploading your first video!
+              It looks like you haven't uploaded or censored any videos. Get started by uploading your first video for censoring!
             </p>
             <Button asChild size="lg" className="!bg-primary hover:!bg-primary/90 text-primary-foreground">
               <Link href="/dashboard/upload">
-                <UploadCloudIcon className="mr-2 h-5 w-5" /> Upload Your First Video
+                <UploadCloud className="mr-2 h-5 w-5" /> Upload Your First Video
               </Link>
             </Button>
           </div>
@@ -66,3 +66,4 @@ export default function MyVideosPage() {
     </>
   );
 }
+```

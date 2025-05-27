@@ -1,5 +1,7 @@
+
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/upscale-video.ts';
-import '@/ai/flows/suggest-upscale-enhancements.ts';
+import '@/ai/flows/censor-video.ts';
+// Removed suggest-upscale-enhancements.ts as it's no longer relevant
+```
