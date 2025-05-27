@@ -67,4 +67,3 @@ export async function readFileAsDataURI(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
-```
