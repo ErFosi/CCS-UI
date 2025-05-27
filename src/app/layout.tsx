@@ -1,5 +1,6 @@
 
-import type { Metadata } from 'next';
+"use client"; // Make this a Client Component
+
 import { Inter } from 'next/font/google'; // Using Inter as Geist is not standard, for broad compatibility.
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -15,10 +16,9 @@ const inter = Inter({
 // If a specific mono font is required and Geist Mono is problematic, specify another or remove.
 // For now, we'll rely on the sans-serif for general UI.
 
-export const metadata: Metadata = {
-  title: 'VideoRevive',
-  description: 'Upscale your videos with AI.',
-};
+// Note: Static metadata cannot be exported from a Client Component.
+// If you need to set dynamic metadata (e.g., document title),
+// you can do so using `useEffect` hooks within your client components.
 
 export default function RootLayout({
   children,
