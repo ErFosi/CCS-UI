@@ -114,4 +114,3 @@ export function VideoCard({ video }: VideoCardProps) {
     </Card>
   );
 }
-```
