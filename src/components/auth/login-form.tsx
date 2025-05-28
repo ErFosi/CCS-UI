@@ -21,9 +21,10 @@ import { useTheme } from "@/context/theme-context";
 import { useAuth } from "@/context/auth-context";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { jwtDecode } from "jwt-decode"; // Import jwt-decode
 
 const formSchema = z.object({
-  username: z.string().min(1, { // Changed from email to username
+  username: z.string().min(1, {
     message: "Username is required.",
   }),
   password: z.string().min(1, {
@@ -45,7 +46,6 @@ export function LoginForm() {
     },
   });
 
-  // Debug log for env vars
   useEffect(() => {
     console.log("[CLIENT] LoginForm ENV CHECK:", {
       url: process.env.NEXT_PUBLIC_KEYCLOAK_URL,
@@ -82,10 +82,10 @@ export function LoginForm() {
         client_id: keycloakClientId,
         username: values.username,
         password: values.password,
-        // Removed explicit scope to match the user's working curl command
+        // No explicit scope parameter, to match your working curl command
       });
       
-      console.log("[CLIENT] LoginForm: Token request body:", requestBody.toString());
+      console.log("[CLIENT] LoginForm: Token request body (raw string):", requestBody.toString());
 
       const response = await fetch(tokenUrl, {
         method: 'POST',
@@ -116,13 +116,22 @@ export function LoginForm() {
             refreshStored: !!localStorage.getItem('kc_refresh_token'),
             idStored: !!localStorage.getItem('kc_id_token'),
         });
+
+        try {
+          const decodedToken: any = jwtDecode(tokenData.access_token);
+          console.log("[CLIENT] LoginForm: Decoded access token payload from app:", decodedToken);
+          console.log("[CLIENT] LoginForm: Decoded 'iss' claim from app's access token:", decodedToken.iss);
+          console.log("[CLIENT] LoginForm: Decoded 'aud' claim from app's access token:", decodedToken.aud);
+        } catch (decodeError) {
+          console.error("[CLIENT] LoginForm: Error decoding access token from app:", decodeError);
+        }
         
         toast({
           title: "Login Successful",
           description: "Redirecting to dashboard...",
         });
         
-        window.location.href = "/dashboard/my-videos"; // Force full page reload
+        window.location.href = "/dashboard/my-videos"; 
 
       } else {
         console.error("[CLIENT] LoginForm: Access token not received from Keycloak despite 200 OK. Full response:", tokenData);
@@ -134,7 +143,7 @@ export function LoginForm() {
       let description = "An unexpected error occurred during login.";
       if (error && error.message) {
         description = error.message;
-        if (error.name === 'TypeError' && error.message.toLowerCase().includes('failed to fetch')) {
+        if (error.message.toLowerCase().includes('failed to fetch')) { // Check for 'failed to fetch' specifically
           description = `Failed to fetch from Keycloak token endpoint: ${tokenUrl}. This is often due to:
 1. Network Connectivity: Ensure Keycloak server at ${keycloakUrl} is reachable.
 2. CORS (Cross-Origin Resource Sharing): Verify Keycloak's 'Web Origins' for client '${keycloakClientId}' includes your app's origin (e.g., ${typeof window !== 'undefined' ? window.location.origin : 'your_app_origin'}).
@@ -166,7 +175,7 @@ Please check your browser's Network tab for details on the failed request to the
             alt="SecureGuard AI Logo"
             width={160} 
             height={90} 
-            className="rounded-sm" // Removed w-auto h-auto as width/height props define aspect ratio
+            className="rounded-sm"
             data-ai-hint="company logo"
             priority
             key={theme} 
