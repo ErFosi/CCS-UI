@@ -45,13 +45,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUser(profile);
         }
       } catch (error) {
-        console.error("Keycloak init error:", error);
+        let errorMessage = "Keycloak initialization failed.";
+        if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message) {
+          errorMessage += ` Details: ${error.message}`;
+        } else if (error && typeof error === 'object' && 'error_description' in error && typeof error.error_description === 'string' && error.error_description) {
+          // Keycloak-js sometimes passes error objects with error_description
+          errorMessage += ` Details: ${error.error_description}`;
+        } else if (typeof error === 'string' && error) {
+          errorMessage += ` Details: ${error}`;
+        } else {
+          errorMessage += " No specific error message was provided by Keycloak. This could be due to network issues (Keycloak server unreachable), CORS problems (check Keycloak client's 'Web Origins'), or SSL certificate errors if you're using HTTPS with a self-signed certificate (the browser will block this; you need to trust the certificate). Please check your browser's console (Network tab) for more details and ensure your Keycloak server is correctly configured and accessible.";
+        }
+        console.error("Keycloak init error:", errorMessage, "Raw error object:", error);
         setIsAuthenticated(false);
         setUser(null);
       } finally {
         setKeycloak(kcInstance);
         setIsLoading(false);
       }
+    } else {
+      // This case should ideally not happen if getKeycloakInstance is working.
+      console.error("Keycloak init error: Failed to get Keycloak instance.");
+      setIsLoading(false);
     }
   }, []);
 
@@ -66,7 +81,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsAuthenticated(true);
         keycloak.loadUserProfile().then(profile => setUser(profile as UserProfile));
       };
-      keycloak.onAuthError = () => {
+      keycloak.onAuthError = (errorData) => {
+        console.error("Keycloak Auth Error:", errorData);
         setIsAuthenticated(false);
         setUser(null);
       };
@@ -74,9 +90,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
          // Token refreshed
       };
       keycloak.onAuthRefreshError = () => {
+        console.error("Keycloak Auth Refresh Error: Failed to refresh token. Logging out.");
         setIsAuthenticated(false);
         setUser(null);
         keycloak.clearToken(); // Clear tokens if refresh fails
+        // It's often good to logout if refresh fails critically
+        // keycloak.logout(); 
       };
       keycloak.onAuthLogout = () => {
         setIsAuthenticated(false);
@@ -85,6 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
       keycloak.onTokenExpired = () => {
         keycloak.updateToken(30).catch(() => {
+          console.error("Keycloak Token Expired: Failed to update token. Logging out.");
           keycloak.logout();
         });
       };
