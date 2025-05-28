@@ -5,25 +5,28 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { LogOut, UserCircle, Moon, Sun, CreditCard } from "lucide-react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "@/context/theme-context"; 
+import { useAuth } from "@/context/auth-context"; // Import useAuth
 
 export function AppHeader() {
-  const router = useRouter();
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme(); 
+  const { logout, user, isLoading: authIsLoading } = useAuth(); // Use logout from AuthContext
 
-  const handleLogout = () => {
-    router.push("/login");
+  const handleLogout = async () => {
+    await logout();
   };
 
   const getPageTitle = () => {
     if (pathname === "/dashboard/my-videos") return "My Videos";
-    if (pathname === "/dashboard/upload") return "Upload & Censor"; // Changed
+    if (pathname === "/dashboard/upload") return "Upload & Censor";
     if (pathname === "/dashboard/subscription") return "Subscription";
     return "Dashboard"; 
   };
+
+  const displayName = user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.username || "User";
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 sm:px-6 shadow-sm">
@@ -39,12 +42,14 @@ export function AppHeader() {
       </h1>
 
       <div className="flex items-center gap-2 sm:gap-4">
-        <span className="text-sm font-medium text-foreground hidden sm:inline">
-          John Doe 
-        </span>
+        {!authIsLoading && user && (
+          <span className="text-sm font-medium text-foreground hidden sm:inline">
+            {displayName}
+          </span>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full">
+            <Button variant="ghost" size="icon" className="rounded-full" disabled={authIsLoading}>
               <UserCircle className="h-6 w-6" />
               <span className="sr-only">User Menu</span>
             </Button>

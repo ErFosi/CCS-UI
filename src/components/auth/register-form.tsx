@@ -4,7 +4,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { useRouter } from "next/navigation";
 import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import {
@@ -19,12 +18,19 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/context/theme-context"; 
+import { useAuth } from "@/context/auth-context";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+
 
 const registerFormSchema = z.object({
+  username: z.string().min(3, { message: "Username must be at least 3 characters." }),
   email: z.string().email({
     message: "Invalid email address.",
   }),
-  password: z.string().min(6, {
+  firstName: z.string().min(1, { message: "First name is required." }),
+  lastName: z.string().min(1, { message: "Last name is required." }),
+  password: z.string().min(6, { // Keycloak typically has password policies
     message: "Password must be at least 6 characters.",
   }),
   confirmPassword: z.string().min(6, {
@@ -35,26 +41,80 @@ const registerFormSchema = z.object({
   path: ["confirmPassword"], 
 });
 
+export type RegisterFormValues = z.infer<typeof registerFormSchema>;
+
 export function RegisterForm() {
-  const router = useRouter();
   const { toast } = useToast();
   const { theme } = useTheme(); 
+  const { keycloak, isLoading: authIsLoading } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm<z.infer<typeof registerFormSchema>>({
+  const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerFormSchema),
     defaultValues: {
+      username: "",
       email: "",
+      firstName: "",
+      lastName: "",
       password: "",
       confirmPassword: "",
     },
   });
 
-  function onSubmit(values: z.infer<typeof registerFormSchema>) {
-    console.log("Registration attempt with:", values);
-    toast({
-      title: "Registration Successful",
-      description: "Redirecting to login...",
-    });
+  async function onSubmit(values: RegisterFormValues) {
+    setIsSubmitting(true);
+    console.log("Attempting Keycloak registration with (raw form values):", values);
+
+    // IMPORTANT: Direct user registration via Keycloak Admin API from a public client
+    // is NOT recommended and generally not possible without insecurely exposing admin credentials
+    // or using a backend proxy.
+    // The `keycloak.register()` method in `keycloak-js` usually redirects to Keycloak's
+    // own registration page if enabled in the realm.
+
+    // If you want to use THIS custom UI form for registration, you typically need:
+    // 1. A backend API endpoint (e.g., in your FastAPI backend).
+    // 2. This frontend form POSTs the data to your backend API.
+    // 3. Your backend API (as a confidential client or with service account) then uses
+    //    Keycloak's Admin REST API to create the user.
+
+    // For this example, we will simulate initiating the process.
+    // In a real scenario, replace this with a call to your backend.
+    
+    try {
+      // Placeholder: Log data and show a message.
+      // Replace this with an actual API call to your backend for registration.
+      console.log("Registration Data to send to backend:", {
+        username: values.username,
+        email: values.email,
+        firstName: values.firstName,
+        lastName: values.lastName,
+        password: values.password, // Password should only be sent to your secure backend over HTTPS
+      });
+
+      toast({
+        title: "Registration Initiated",
+        description: "Account creation request sent. This is a placeholder; backend integration needed.",
+      });
+      
+      // Example of how one *might* redirect to Keycloak's registration page if enabled.
+      // This would ignore the custom form fields beyond potential hints.
+      // if (keycloak) {
+      //   keycloak.register(); // This redirects to Keycloak's page
+      // } else {
+      //   toast({ title: "Auth service not available", variant: "destructive" });
+      // }
+
+      form.reset(); // Reset form after "submission"
+    } catch (error: any) {
+      console.error("Registration submission error:", error);
+      toast({
+        title: "Registration Failed",
+        description: error.message || "Could not process registration request.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
   
   const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
@@ -77,7 +137,20 @@ export function RegisterForm() {
       </CardHeader>
       <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-6">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="username"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Username</FormLabel>
+                  <FormControl>
+                    <Input placeholder="your_username" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="email"
@@ -85,12 +158,40 @@ export function RegisterForm() {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="you@example.com" {...field} />
+                    <Input type="email" placeholder="you@example.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>First Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Last Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
               name="password"
@@ -117,7 +218,8 @@ export function RegisterForm() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full !bg-primary hover:!bg-primary/90 text-primary-foreground">
+            <Button type="submit" className="w-full !bg-primary hover:!bg-primary/90 text-primary-foreground" disabled={isSubmitting || authIsLoading}>
+              {isSubmitting || authIsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Sign Up
             </Button>
           </form>

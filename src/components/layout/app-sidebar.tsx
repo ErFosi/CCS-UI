@@ -15,21 +15,21 @@ import {
 } from "@/components/ui/sidebar";
 import { Film, UploadCloud, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
 import { useTheme } from "@/context/theme-context";
+import { useAuth } from "@/context/auth-context"; // Import useAuth
 
 const navItems = [
   { href: "/dashboard/my-videos", label: "My Videos", icon: Film },
-  { href: "/dashboard/upload", label: "Upload & Censor", icon: UploadCloud }, // Changed
+  { href: "/dashboard/upload", label: "Upload & Censor", icon: UploadCloud },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { theme } = useTheme();
+  const { logout, isLoading: authIsLoading } = useAuth(); // Use logout from AuthContext
 
-  const handleLogout = () => {
-    router.push("/login");
+  const handleLogout = async () => {
+    await logout();
   };
 
   const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
@@ -40,23 +40,25 @@ export function AppSidebar() {
         <Link href="/dashboard/my-videos" className="group-data-[collapsible=icon]:hidden">
             <Image
               src={logoSrc}
-              alt="SecureGuard AI Logo" // Changed
+              alt="SecureGuard AI Logo" 
               width={120}
               height={67.5}
               className="rounded-sm"
               priority
               key={theme}
+              data-ai-hint="company logo"
             />
         </Link>
          <Link href="/dashboard/my-videos" className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
             <Image
               src={logoSrc}
-              alt="SecureGuard AI Logo" // Changed
+              alt="SecureGuard AI Logo" 
               width={32}
               height={32}
               className="rounded-sm"
               priority
               key={theme + "-icon"}
+              data-ai-hint="company logo small"
             />
         </Link>
       </SidebarHeader>
@@ -91,6 +93,7 @@ export function AppSidebar() {
             className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-center"
             title="Logout"
             aria-label="Logout"
+            disabled={authIsLoading}
           >
             <LogOut className="h-5 w-5" />
             <span className="group-data-[collapsible=icon]:hidden">Logout</span>
