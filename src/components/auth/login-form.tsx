@@ -24,8 +24,8 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 const formSchema = z.object({
-  email: z.string().email({
-    message: "Invalid email or username.",
+  username: z.string().min(1, {
+    message: "Username is required.",
   }),
   password: z.string().min(1, {
     message: "Password is required.",
@@ -36,13 +36,13 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { isLoading: authIsLoading } = useAuth();
+  const { isLoading: authIsLoading } = useAuth(); // Renamed to avoid conflict
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: "",
+      username: "",
       password: "",
     },
   });
@@ -67,56 +67,53 @@ export function LoginForm() {
     const tokenUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/token`;
 
     try {
-      console.log(`Attempting to fetch token from: ${tokenUrl} for client: ${keycloakClientId}`);
+      console.log(`[CLIENT] LoginForm: Attempting to fetch token from: ${tokenUrl} for client: ${keycloakClientId} with username: ${values.username}`);
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'password',
           client_id: keycloakClientId,
-          username: values.email,
+          username: values.username, // Use username from form
           password: values.password,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error_description: `HTTP error ${response.status} from Keycloak. No further details.` }));
-        console.error("Keycloak token exchange failed:", errorData, "Status:", response.status);
+        console.error("[CLIENT] LoginForm: Keycloak token exchange failed:", errorData, "Status:", response.status);
         throw new Error(errorData.error_description || `Login failed. Keycloak responded with status ${response.status}.`);
       }
 
       const tokenData = await response.json();
 
       if (tokenData.access_token) {
-        // Store tokens in localStorage to be picked up by AuthProvider on next load/init
         localStorage.setItem('kc_access_token', tokenData.access_token);
         if (tokenData.refresh_token) localStorage.setItem('kc_refresh_token', tokenData.refresh_token);
         if (tokenData.id_token) localStorage.setItem('kc_id_token', tokenData.id_token);
         if (tokenData.expires_in) localStorage.setItem('kc_expires_in', tokenData.expires_in.toString());
         
-        console.log("Tokens stored in localStorage. Navigating to dashboard...");
+        console.log("[CLIENT] LoginForm: Tokens stored in localStorage. Navigating to dashboard...");
         toast({
           title: "Login Successful",
-          description: "Tokens obtained. Redirecting to establish session...",
+          description: "Tokens obtained. Redirecting...",
         });
         
-        // IMPORTANT: Do NOT call keycloak.init() here.
-        // AuthProvider will handle initialization on the next page load using these stored tokens.
-        router.push("/dashboard/my-videos");
+        router.push("/dashboard/my-videos"); // AuthProvider will handle init on next page load
 
       } else {
         throw new Error("Access token not received from Keycloak.");
       }
 
     } catch (error: any) {
-      console.error("Login error (raw object):", error);
+      console.error("[CLIENT] LoginForm: Login error (raw object):", error);
       let description = "An unexpected error occurred during login.";
       if (error && error.message) {
         description = error.message;
         if (error.name === 'TypeError' && error.message.toLowerCase().includes('failed to fetch')) {
           description = `Failed to fetch from Keycloak token endpoint: ${tokenUrl}. This is often due to:
 1. Network Connectivity: Ensure Keycloak server at ${keycloakUrl} is reachable.
-2. CORS (Cross-Origin Resource Sharing): Verify Keycloak's 'Web Origins' for client '${keycloakClientId}' includes your app's origin (e.g., http://localhost:9002).
+2. CORS (Cross-Origin Resource Sharing): Verify Keycloak's 'Web Origins' for client '${keycloakClientId}' includes your app's origin (e.g., ${typeof window !== 'undefined' ? window.location.origin : 'your_app_origin'}).
 3. SSL Certificate: If using HTTPS, your browser must trust Keycloak's SSL certificate. Self-signed certificates often cause this.
 Please check your browser's Network tab for details on the failed request to the token endpoint.`;
         }
@@ -157,12 +154,12 @@ Please check your browser's Network tab for details on the failed request to the
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
               control={form.control}
-              name="email"
+              name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Username or Email</FormLabel>
+                  <FormLabel>Username</FormLabel>
                   <FormControl>
-                    <Input placeholder="your_username or you@example.com" {...field} />
+                    <Input placeholder="your_username" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

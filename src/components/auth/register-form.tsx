@@ -63,50 +63,54 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    console.log("Attempting Keycloak registration with (raw form values):", values);
+    console.log("[CLIENT] RegisterForm: Attempting registration with (raw form values):", values);
 
     // IMPORTANT: Direct user registration via Keycloak Admin API from a public client
-    // is NOT recommended and generally not possible without insecurely exposing admin credentials
-    // or using a backend proxy.
-    // The `keycloak.register()` method in `keycloak-js` usually redirects to Keycloak's
-    // own registration page if enabled in the realm.
+    // (like this Next.js app) is NOT recommended and generally not possible without 
+    // insecurely exposing admin credentials or using a backend proxy.
+    // The `keycloak-js` library's `register()` method typically redirects to Keycloak's 
+    // own registration page if user registration is enabled in the realm settings.
 
-    // If you want to use THIS custom UI form for registration, you typically need:
+    // To use THIS custom UI form for registration that creates a user directly in Keycloak
+    // with all these fields, you typically need:
     // 1. A backend API endpoint (e.g., in your FastAPI backend).
     // 2. This frontend form POSTs the data to your backend API.
-    // 3. Your backend API (as a confidential client or with service account) then uses
-    //    Keycloak's Admin REST API to create the user.
+    // 3. Your backend API (configured as a confidential client or using a service account for Keycloak) 
+    //    then uses Keycloak's Admin REST API to create the user.
+    // This is the secure and standard way to handle user creation from a custom UI.
 
-    // For this example, we will simulate initiating the process.
-    // In a real scenario, replace this with a call to your backend.
+    // For this frontend example, we will continue to simulate initiating the process.
+    // In a real scenario, replace the console.log and toast below with an API call to YOUR backend.
     
     try {
-      // Placeholder: Log data and show a message.
-      // Replace this with an actual API call to your backend for registration.
-      console.log("Registration Data to send to backend:", {
+      console.log("[CLIENT] RegisterForm: Registration Data to send to backend:", {
         username: values.username,
         email: values.email,
         firstName: values.firstName,
         lastName: values.lastName,
-        password: values.password, // Password should only be sent to your secure backend over HTTPS
+        // IMPORTANT: The password should ONLY be sent from this client to YOUR secure backend over HTTPS.
+        // Your backend would then hash it or pass it to Keycloak as required by Keycloak's API.
+        password: values.password, 
       });
 
       toast({
-        title: "Registration Initiated",
-        description: "Account creation request sent. This is a placeholder; backend integration needed.",
+        title: "Registration Initiated (Simulation)",
+        description: "Account creation request data collected. For actual user creation, backend integration with Keycloak Admin API is required via a secure backend endpoint.",
+        duration: 7000, // Longer duration for this important message
       });
       
-      // Example of how one *might* redirect to Keycloak's registration page if enabled.
-      // This would ignore the custom form fields beyond potential hints.
-      // if (keycloak) {
+      // Example of how one *might* redirect to Keycloak's own registration page if it's enabled.
+      // This would bypass your custom form data (firstName, lastName etc.) unless Keycloak's
+      // registration flow is customized to ask for them.
+      // if (keycloak && keycloak.authenticated === false) { // Check if not already authenticated
       //   keycloak.register(); // This redirects to Keycloak's page
       // } else {
-      //   toast({ title: "Auth service not available", variant: "destructive" });
+      //   console.warn("[CLIENT] RegisterForm: Keycloak instance not available or user already authenticated, cannot redirect to Keycloak registration page.");
       // }
 
       form.reset(); // Reset form after "submission"
     } catch (error: any) {
-      console.error("Registration submission error:", error);
+      console.error("[CLIENT] RegisterForm: Registration submission error:", error);
       toast({
         title: "Registration Failed",
         description: error.message || "Could not process registration request.",
