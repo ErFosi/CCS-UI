@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useTheme } from "@/context/theme-context"; 
+import { useTheme } from "@/context/theme-context";
 import { useAuth } from "@/context/auth-context";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -35,7 +35,7 @@ const formSchema = z.object({
 export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
-  const { theme } = useTheme(); 
+  const { theme } = useTheme();
   const { keycloak, isLoading: authIsLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -43,7 +43,7 @@ export function LoginForm() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: "", 
+      email: "",
       password: "",
     },
   });
@@ -70,7 +70,7 @@ export function LoginForm() {
       setIsSubmitting(false);
       return;
     }
-    
+
     const tokenUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/token`;
 
     try {
@@ -90,30 +90,27 @@ export function LoginForm() {
         console.error("Keycloak token exchange failed:", errorData, "Status:", response.status);
         throw new Error(errorData.error_description || `Login failed. Keycloak responded with status ${response.status}.`);
       }
-      
+
       const tokenData = await response.json();
-      
-      await keycloak.clearToken(); 
 
-      await keycloak.init({ 
-          onLoad: 'check-sso', 
-          pkceMethod: 'S256',
-          token: tokenData.access_token,
-          refreshToken: tokenData.refresh_token,
-          idToken: tokenData.id_token,
-          timeSkew: tokenData.expires_in 
-      });
+      if (tokenData.access_token) {
+        // Store tokens in localStorage to be picked up by AuthProvider on next load/init
+        localStorage.setItem('kc_access_token', tokenData.access_token);
+        if (tokenData.refresh_token) localStorage.setItem('kc_refresh_token', tokenData.refresh_token);
+        if (tokenData.id_token) localStorage.setItem('kc_id_token', tokenData.id_token);
+        if (tokenData.expires_in) localStorage.setItem('kc_expires_in', tokenData.expires_in.toString());
 
-      if (keycloak.authenticated) {
+
         toast({
           title: "Login Successful",
-          description: "Redirecting to your dashboard...",
+          description: "Tokens obtained. Redirecting to establish session...",
         });
+        // Navigate to the dashboard. AuthProvider will run its initializeKeycloak
+        // which will now pick up these tokens from localStorage.
         router.push("/dashboard/my-videos");
+
       } else {
-        // This part might be tricky. If init succeeds with tokens but authenticated is false,
-        // it could mean the tokens are invalid or session couldn't be established.
-        toast({ title: "Login session could not be established.", description: "Keycloak did not confirm authentication after token init.", variant: "destructive" });
+        throw new Error("Access token not received from Keycloak.");
       }
 
     } catch (error: any) {
@@ -121,7 +118,6 @@ export function LoginForm() {
       let description = "An unexpected error occurred during login.";
       if (error && error.message) {
         description = error.message;
-        // Check if the error is specifically a "Failed to fetch"
         if (error.name === 'TypeError' && error.message.toLowerCase().includes('failed to fetch')) {
           description = `Failed to fetch from Keycloak token endpoint: ${tokenUrl}. This is often due to:
 1. Network Connectivity: Ensure Keycloak server at ${keycloakUrl} is reachable.
@@ -132,7 +128,7 @@ Please check your browser's Network tab for details on the failed request to the
       } else if (typeof error === 'string') {
         description = error;
       }
-      
+
       toast({
         title: "Login Failed",
         description: description,
@@ -150,14 +146,14 @@ Please check your browser's Network tab for details on the failed request to the
       <CardHeader className="text-center">
         <div className="mx-auto mb-4 flex items-center justify-center">
           <Image
-            src={logoSrc} 
+            src={logoSrc}
             alt="SecureGuard AI Logo"
-            width={160} 
-            height={90} 
+            width={160}
+            height={90}
             className="rounded-sm"
             data-ai-hint="company logo"
             priority
-            key={theme} 
+            key={theme}
           />
         </div>
       </CardHeader>
