@@ -1,14 +1,10 @@
 
-'use server'; // Can be used by server components if needed, but primarily for client-side fetch
+// REMOVED: 'use server'; - This module will now be client-side.
 
 import type { VideoAsset } from '@/lib/types';
-import https from 'https'; // For custom agent
-import NextFetch from 'node-fetch'; // Using an alias to avoid conflict with global fetch if any
-import type { RequestInit as NodeFetchRequestInit, Response as NodeFetchResponse } from 'node-fetch';
-
+// Removed https and node-fetch imports as they are for server-side.
 
 const getApiUrl = (): string => {
-  // Ensure this uses the correct variable for your FastAPI backend
   const apiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
   if (!apiUrl) {
     console.error("Error: NEXT_PUBLIC_FASTAPI_URL is not defined in environment variables.");
@@ -19,14 +15,8 @@ const getApiUrl = (): string => {
 
 interface FetchOptions extends RequestInit {
   token?: string;
-  responseType?: 'blob' | 'json'; // Keep this for client-side hints if necessary
+  responseType?: 'blob' | 'json';
 }
-
-// Type guard for NodeFetchRequestInit
-function isNodeFetchRequestInit(options: any): options is NodeFetchRequestInit {
-  return 'agent' in options || 'compress' in options; // Add other node-fetch specific options if needed
-}
-
 
 async function fetchWithAuth<T = any>(
   path: string,
@@ -40,69 +30,61 @@ async function fetchWithAuth<T = any>(
     headers.append('Authorization', `Bearer ${options.token}`);
   }
 
-  // Do not set Content-Type for FormData, browser will do it with boundary
+  // Do not set Content-Type for FormData; the browser will do it with the correct boundary.
   if (!(options.body instanceof FormData) && typeof options.body === 'string') {
-    if (!headers.has('Content-Type') && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
-      headers.append('Content-Type', 'application/json');
-    }
+     if (!headers.has('Content-Type') && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
+        headers.append('Content-Type', 'application/json');
+     }
   }
+
+  console.log(`[API_CLIENT - BROWSER] Making ${options.method || 'GET'} request to: ${fullUrl}`);
   
-  let response: Response | NodeFetchResponse;
-
-  if (typeof window === 'undefined' && process.env.NODE_ENV === 'development' && fullUrl.startsWith('https:')) {
-    // Server-side fetch in development for HTTPS: use node-fetch with rejectUnauthorized: false
-    console.log(`[apiClient] Server-side DEV fetch to ${fullUrl} with SSL bypass`);
-    const httpsAgent = new https.Agent({
-      rejectUnauthorized: false, // Bypass SSL certificate validation
-    });
-    
-    const nodeFetchOptions: NodeFetchRequestInit = {
-      method: options.method,
-      headers: headers as any, // node-fetch uses a slightly different Headers type or plain object
-      body: options.body as any, // FormData or string
-      agent: httpsAgent,
-    };
-    response = await NextFetch(fullUrl, nodeFetchOptions);
-
-  } else {
-    // Client-side fetch or production server-side fetch
-    console.log(`[apiClient] Standard fetch to ${fullUrl}`);
-    response = await fetch(fullUrl, {
-      ...options,
-      headers,
-    });
-  }
-
+  const response = await fetch(fullUrl, {
+    ...options,
+    headers,
+  });
 
   if (!response.ok) {
     let errorData;
     try {
-      // Ensure we use .json() appropriate for the response object type
-      errorData = await (response as any).json(); 
+      errorData = await response.json();
     } catch (e) {
-      errorData = { detail: response.statusText || "An unknown error occurred" };
+      // If response is not JSON, use statusText or a generic message
+      errorData = { detail: response.statusText || `Request failed with status ${response.status}` };
     }
-    console.error(`API Error ${response.status} for ${path}:`, errorData);
+    console.error(`[API_CLIENT - BROWSER] API Error ${response.status} for ${path}:`, errorData);
     throw new Error(errorData.detail || `Request failed with status ${response.status}`);
   }
 
   const contentType = response.headers.get("content-type");
-  if (options.responseType === 'blob' || (contentType && contentType.startsWith('video/'))) {
-     // For file downloads or non-JSON responses
+
+  // Handle no content response (e.g., for HTTP 204)
+  if (response.status === 204 || !contentType) {
+    return undefined as T; // Or handle as appropriate for your API (e.g., return {} as T)
+  }
+
+  if (options.responseType === 'blob' || (contentType && (contentType.startsWith('video/') || contentType.startsWith('image/') || contentType === 'application/octet-stream'))) {
     return response.blob() as Promise<T>;
   }
+  
   if (contentType && contentType.includes("application/json")) {
-    return (response as any).json() as Promise<T>;
+    return response.json() as Promise<T>;
   }
   
-  return undefined as T; 
+  // Fallback for other content types, e.g., text/plain
+  // For now, assuming JSON or blob are the primary expected types.
+  console.warn(`[API_CLIENT - BROWSER] Unexpected content type: ${contentType} for path ${path}. Trying to parse as text.`);
+  return response.text() as Promise<T>; // Or handle more specific text cases if needed
 }
 
 export async function listVideosApi(token: string): Promise<VideoAsset[]> {
+  console.log("[API_CLIENT - BROWSER] listVideosApi called");
   return fetchWithAuth<VideoAsset[]>('/videos', { token, method: 'GET' });
 }
 
 export async function uploadVideoApi(formData: FormData, token: string): Promise<VideoAsset> {
+  console.log("[API_CLIENT - BROWSER] uploadVideoApi called");
+  // For FormData, Content-Type is set by the browser. Do not set it manually.
   return fetchWithAuth<VideoAsset>('/upload', {
     method: 'POST',
     body: formData,
@@ -111,21 +93,23 @@ export async function uploadVideoApi(formData: FormData, token: string): Promise
 }
 
 export async function getVideoApi(filename: string, token: string): Promise<Blob> {
+  console.log(`[API_CLIENT - BROWSER] getVideoApi called for filename: ${filename}`);
   return fetchWithAuth<Blob>(`/videos/${encodeURIComponent(filename)}`, {
     token,
     method: 'GET',
-    responseType: 'blob', 
+    responseType: 'blob',
   });
 }
 
 export async function setPreferenceApi(
   payload: { key: string; value: any },
   token: string
-): Promise<void> {
-  await fetchWithAuth('/preferences', {
+): Promise<void> { // Assuming POST /preferences returns no content (204) or simple success
+  console.log("[API_CLIENT - BROWSER] setPreferenceApi called with payload:", payload);
+  await fetchWithAuth<void>('/preferences', { // Expecting no content or just success status
     method: 'POST',
     body: JSON.stringify(payload),
     token,
-    headers: { 'Content-Type': 'application/json' },
+    // headers: { 'Content-Type': 'application/json' }, // fetchWithAuth handles this
   });
 }
