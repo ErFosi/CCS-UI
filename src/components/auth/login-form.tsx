@@ -21,13 +21,18 @@ import { useTheme } from "@/context/theme-context";
 import { useAuth } from "@/context/auth-context";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { jwtDecode } from "jwt-decode";
+// Removed jwt-decode as it's no longer needed here
 
 const formSchema = z.object({
-  username: z.string().min(1, {
+  // Username and password fields are still needed for the form,
+  // but Keycloak's page will handle the actual credential validation.
+  // You might choose to remove them if you always redirect,
+  // or keep them if you might re-introduce a direct grant attempt later for other reasons.
+  // For now, we'll keep them but the primary action is keycloak.login().
+  username: z.string().min(1, { // Kept for UI consistency, but won't be sent directly by this form
     message: "Username is required.",
   }),
-  password: z.string().min(1, {
+  password: z.string().min(1, { // Kept for UI consistency
     message: "Password is required.",
   }),
 });
@@ -35,8 +40,8 @@ const formSchema = z.object({
 export function LoginForm() {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { isLoading: authIsLoading } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { login, isLoading: authIsLoading, keycloak } = useAuth(); // Use login from AuthContext
+  const [isSubmitting, setIsSubmitting] = useState(false); // To disable button during redirect initiation
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -55,126 +60,34 @@ export function LoginForm() {
   }, []);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    // Values from the form (username, password) are not directly used here for token fetching.
+    // We will redirect to Keycloak's login page.
     setIsSubmitting(true);
-    console.log(`[CLIENT] LoginForm: onSubmit - Username: ${values.username}`);
+    console.log(`[CLIENT] LoginForm: onSubmit - Attempting to redirect to Keycloak login.`);
 
-    const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL;
-    const keycloakRealm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM;
-    const keycloakClientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID;
-
-    const expectedIssuer = `${keycloakUrl}/realms/${keycloakRealm}`;
-    console.log(`[CLIENT] LoginForm: Expected Issuer based on .env: ${expectedIssuer}`);
-
-    if (!keycloakUrl || !keycloakRealm || !keycloakClientId) {
+    if (!keycloak) {
       toast({
-        title: "Configuration Error",
-        description: "Keycloak configuration (URL, Realm, Client ID) is missing. Please check .env file.",
+        title: "Initialization Error",
+        description: "Keycloak is not yet initialized. Please wait a moment and try again.",
         variant: "destructive",
       });
-      console.error("[CLIENT] LoginForm: Keycloak environment variables missing.");
       setIsSubmitting(false);
       return;
     }
 
-    const tokenUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/token`;
-    console.log(`[CLIENT] LoginForm: Attempting Direct Access Grant to: ${tokenUrl}`);
-
-    const requestBody = new URLSearchParams({
-      grant_type: 'password',
-      client_id: keycloakClientId,
-      username: values.username,
-      password: values.password,
-      // No explicit scope parameter, to match your working curl command and get default scopes
-    });
-    console.log("[CLIENT] LoginForm: Token request body (raw string):", requestBody.toString());
-
     try {
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: requestBody,
-      });
-
-      const tokenData = await response.json();
-      console.log("[CLIENT] LoginForm: Keycloak token response:", tokenData);
-
-      if (!response.ok) {
-        const errorDescription = tokenData.error_description || `HTTP error ${response.status} from Keycloak. No further details.`;
-        console.error("[CLIENT] LoginForm: Keycloak token exchange failed:", tokenData, "Status:", response.status);
-        throw new Error(errorDescription);
-      }
-
-      if (tokenData.access_token) {
-        console.log("[CLIENT] LoginForm: Tokens received from Direct Access Grant.");
-        localStorage.setItem('kc_access_token', tokenData.access_token);
-        if (tokenData.refresh_token) localStorage.setItem('kc_refresh_token', tokenData.refresh_token);
-        if (tokenData.id_token) {
-          localStorage.setItem('kc_id_token', tokenData.id_token);
-        } else {
-          localStorage.removeItem('kc_id_token'); // Ensure it's cleared if not present
-        }
-        if (tokenData.expires_in) localStorage.setItem('kc_expires_in', tokenData.expires_in.toString());
-        
-        console.log("[CLIENT] LoginForm: Tokens stored in localStorage. Forcing full page navigation to /dashboard/my-videos", {
-            accessStored: !!localStorage.getItem('kc_access_token'),
-            refreshStored: !!localStorage.getItem('kc_refresh_token'),
-            idStored: !!localStorage.getItem('kc_id_token'),
-        });
-
-        try {
-          const decodedToken: any = jwtDecode(tokenData.access_token);
-          console.log("[CLIENT] LoginForm: Decoded access token payload from app:", decodedToken);
-          const tokenIssuer = decodedToken.iss;
-          console.log("[CLIENT] LoginForm: Decoded 'iss' claim from app's access token:", tokenIssuer);
-          console.log("[CLIENT] LoginForm: Decoded 'aud' claim from app's access token:", decodedToken.aud);
-          if (tokenIssuer !== expectedIssuer) {
-            console.error(`CRITICAL ISSUER MISMATCH! Token 'iss': ${tokenIssuer}, Expected 'iss' (from .env): ${expectedIssuer}`);
-            toast({
-                title: "Token Issuer Mismatch",
-                description: `Token issuer '${tokenIssuer}' does not match expected '${expectedIssuer}'. API calls will likely fail. Check frontend .env (NEXT_PUBLIC_KEYCLOAK_URL) and backend OIDC_ISSUER config.`,
-                variant: "destructive",
-                duration: 10000, // Longer duration
-            });
-          }
-        } catch (decodeError) {
-          console.error("[CLIENT] LoginForm: Error decoding access token from app:", decodeError);
-        }
-        
-        toast({
-          title: "Login Successful",
-          description: "Redirecting to dashboard...",
-        });
-        
-        window.location.href = "/dashboard/my-videos"; 
-
-      } else {
-        console.error("[CLIENT] LoginForm: Access token not received from Keycloak despite 200 OK. Full response:", tokenData);
-        throw new Error("Access token not received from Keycloak.");
-      }
-
+      // This will redirect the user to Keycloak's login page.
+      // Keycloak will handle credentials and then redirect back.
+      await login(); // login function from useAuth now calls keycloak.login()
+      // The page will redirect, so code here might not execute if redirect is immediate.
+      // We don't expect to reach here if redirect is successful.
     } catch (error: any) {
-      console.error("[CLIENT] LoginForm: Login error (raw object):", error);
-      let description = "An unexpected error occurred during login.";
-      if (error && error.message) {
-        description = error.message;
-        if (error.message.toLowerCase().includes('failed to fetch')) { 
-          description = `Failed to fetch from Keycloak token endpoint: ${tokenUrl}. This is often due to:
-1. Network Connectivity: Ensure Keycloak server at ${keycloakUrl} is reachable.
-2. CORS (Cross-Origin Resource Sharing): Verify Keycloak's 'Web Origins' for client '${keycloakClientId}' includes your app's origin ('${typeof window !== 'undefined' ? window.location.origin : 'your_app_origin'}').
-3. SSL Certificate: If using HTTPS, your browser must trust Keycloak's SSL certificate. Self-signed certificates often cause this.
-Please check your browser's Network tab for details on the failed request to the token endpoint.`;
-        }
-      } else if (typeof error === 'string') {
-        description = error;
-      }
-
+      console.error("[CLIENT] LoginForm: Error during keycloak.login() initiation:", error);
       toast({
-        title: "Login Failed",
-        description: description,
+        title: "Login Initiation Failed",
+        description: error.message || "Could not redirect to login page. Check console for details.",
         variant: "destructive",
-        duration: 10000, // Longer duration
       });
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -188,12 +101,12 @@ Please check your browser's Network tab for details on the failed request to the
           <Image
             src={logoSrc}
             alt="SecureGuard AI Logo"
-            width={160} 
-            height={90} 
-            className="rounded-sm" // Removed w-auto h-auto as width/height props are set
+            width={160}
+            height={90}
+            className="rounded-sm"
             data-ai-hint="company logo"
             priority
-            key={theme} 
+            key={theme}
           />
         </div>
       </CardHeader>
@@ -207,7 +120,7 @@ Please check your browser's Network tab for details on the failed request to the
                 <FormItem>
                   <FormLabel>Username</FormLabel>
                   <FormControl>
-                    <Input placeholder="your_username" {...field} />
+                    <Input placeholder="your_username" {...field} autoComplete="username" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -220,7 +133,7 @@ Please check your browser's Network tab for details on the failed request to the
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} autoComplete="current-password"/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
