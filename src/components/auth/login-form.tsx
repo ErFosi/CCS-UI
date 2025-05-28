@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { useRouter } from "next/navigation";
+// Removed useRouter as we'll use window.location for hard redirect
 import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import {
@@ -33,10 +33,9 @@ const formSchema = z.object({
 });
 
 export function LoginForm() {
-  const router = useRouter();
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { isLoading: authIsLoading } = useAuth(); // Renamed to avoid conflict
+  const { isLoading: authIsLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -49,6 +48,7 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
+    console.log(`[CLIENT] LoginForm: onSubmit - Username: ${values.username}`);
 
     const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL;
     const keycloakRealm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM;
@@ -60,21 +60,22 @@ export function LoginForm() {
         description: "Keycloak configuration (URL, Realm, Client ID) is missing. Please check .env file.",
         variant: "destructive",
       });
+      console.error("[CLIENT] LoginForm: Keycloak environment variables missing.");
       setIsSubmitting(false);
       return;
     }
 
     const tokenUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/token`;
+    console.log(`[CLIENT] LoginForm: Attempting Direct Access Grant to: ${tokenUrl}`);
 
     try {
-      console.log(`[CLIENT] LoginForm: Attempting to fetch token from: ${tokenUrl} for client: ${keycloakClientId} with username: ${values.username}`);
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'password',
           client_id: keycloakClientId,
-          username: values.username, // Use username from form
+          username: values.username,
           password: values.password,
         }),
       });
@@ -88,20 +89,23 @@ export function LoginForm() {
       const tokenData = await response.json();
 
       if (tokenData.access_token) {
+        console.log("[CLIENT] LoginForm: Tokens received from Direct Access Grant.");
         localStorage.setItem('kc_access_token', tokenData.access_token);
         if (tokenData.refresh_token) localStorage.setItem('kc_refresh_token', tokenData.refresh_token);
         if (tokenData.id_token) localStorage.setItem('kc_id_token', tokenData.id_token);
         if (tokenData.expires_in) localStorage.setItem('kc_expires_in', tokenData.expires_in.toString());
         
-        console.log("[CLIENT] LoginForm: Tokens stored in localStorage. Navigating to dashboard...");
+        console.log("[CLIENT] LoginForm: Tokens stored in localStorage. Forcing full page navigation to /dashboard/my-videos");
         toast({
           title: "Login Successful",
-          description: "Tokens obtained. Redirecting...",
+          description: "Redirecting to dashboard...",
         });
         
-        router.push("/dashboard/my-videos"); // AuthProvider will handle init on next page load
+        // Force a full page reload to ensure AuthProvider initializes fresh with new tokens
+        window.location.href = "/dashboard/my-videos"; 
 
       } else {
+        console.error("[CLIENT] LoginForm: Access token not received from Keycloak despite 200 OK.");
         throw new Error("Access token not received from Keycloak.");
       }
 
