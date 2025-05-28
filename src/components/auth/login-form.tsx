@@ -19,15 +19,15 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/context/theme-context"; 
-import { useAuth } from "@/context/auth-context"; // Import useAuth
+import { useAuth } from "@/context/auth-context";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 const formSchema = z.object({
-  email: z.string().email({ // Keycloak usually uses username or email for login
+  email: z.string().email({
     message: "Invalid email or username.",
   }),
-  password: z.string().min(1, { // Min 1 for password to allow Keycloak to validate
+  password: z.string().min(1, {
     message: "Password is required.",
   }),
 });
@@ -36,14 +36,14 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const { theme } = useTheme(); 
-  const { keycloak, isLoading: authIsLoading } = useAuth(); // Get Keycloak instance
+  const { keycloak, isLoading: authIsLoading, login: keycloakLoginMethod } = useAuth(); // Using login from context
   const [isSubmitting, setIsSubmitting] = useState(false);
 
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: "", // Can be username or email
+      email: "", 
       password: "",
     },
   });
@@ -55,88 +55,63 @@ export function LoginForm() {
     }
     setIsSubmitting(true);
     try {
-       // Using Direct Access Grant (Password Grant)
-       // This directly sends username and password to Keycloak.
-       // NOTE: This flow is generally discouraged for SPAs if Authorization Code Flow can be used.
-      await keycloak.login({
-        loginHint: values.email, // Optional: pre-fill username/email on Keycloak page if redirected
-        action: 'login', // Ensure it's a login action
-        // For Direct Access Grant, Keycloak.js might not have a direct method.
-        // We typically make a direct POST request to the token endpoint.
-        // However, keycloak.login() with appropriate setup should handle it.
-        // If it redirects, ensure your Keycloak client allows direct grant.
-        // For this example, we'll assume keycloak.login() can be configured
-        // or that you might need a custom fetch to Keycloak's token endpoint.
-        // For simplicity with keycloak-js, often it implies using Keycloak's hosted pages.
-        // Let's proceed assuming `keycloak.login()` handles the flow or
-        // that further customization for direct grant might be needed outside this scope.
-        // A true Direct Access Grant would be an AJAX call to Keycloak's token endpoint.
-        // The `keycloak-js` library's `login` function is more geared towards redirect-based flows.
-        // For a pure SPA form-based login without redirect, you'd manually post to:
-        // POST {keycloakUrl}/realms/{realm}/protocol/openid-connect/token
-        // with grant_type=password, client_id, username, password.
+      // Attempting Direct Access Grant (Password Grant)
+      // This sends username and password directly to Keycloak's token endpoint.
+      // This approach is used to keep the custom UI for login.
+      
+      const tokenUrl = `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`;
+      
+      const response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'password',
+          client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID!,
+          username: values.email, // Keycloak uses 'username' field for this grant
+          password: values.password,
+        }),
+      });
 
-        // Given the constraints of `keycloak-js` `login()` method (usually for redirects),
-        // a more robust solution for custom UI with Direct Access Grant
-        // would involve a manual fetch to the token endpoint.
-        // For now, we'll rely on `keycloak.login()` and see if it can be configured
-        // via Keycloak server settings to work without full page redirect, or handle the redirect gracefully.
-        // If not, this part would need a custom fetch.
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Keycloak token exchange failed:", errorData);
+        throw new Error(errorData.error_description || 'Login failed. Please check credentials.');
+      }
+      
+      const tokenData = await response.json();
 
-        // Simplified approach for this example:
-        // Keycloak.js 'login' will typically redirect. If you want to avoid redirect
-        // and use password grant, you need to make a direct POST request.
-        // This is a simplified representation; a real implementation might be more complex.
-        // This will likely redirect to Keycloak's login page if not already authenticated
-        // or if Keycloak is configured for it.
+      // After successfully getting tokens, we need to inform keycloak-js about them.
+      // This is a tricky part as keycloak-js is primarily designed for redirect-based flows.
+      // Manually setting tokens can be complex. The `keycloak.init()` with new tokens is one way,
+      // but its success in establishing a full session this way can vary.
+      
+      await keycloak.clearToken(); // Clear any existing tokens
 
-        // The following is a conceptual attempt if keycloak-js could handle it directly (often doesn't for DAG from form)
-        // This is a placeholder for actual Direct Access Grant logic.
-        // The library is more for redirect flows.
-        // A proper DAG would be:
-        const response = await fetch(`${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'password',
-            client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID!,
-            username: values.email, // Assuming email is used as username
-            password: values.password,
-          }),
+      // Re-initialize keycloak with the new tokens.
+      // This will attempt to establish the session based on the tokens obtained.
+      // Note: `onLoad: 'login-required'` might trigger redirects if not handled carefully.
+      // For a pure SPA flow after DAG, `check-sso` or a custom token storage might be better.
+      // The `token`, `refreshToken`, `idToken` can be passed to init.
+      await keycloak.init({ 
+          onLoad: 'check-sso', // check-sso is safer here than login-required
+          pkceMethod: 'S256',
+          token: tokenData.access_token,
+          refreshToken: tokenData.refresh_token,
+          idToken: tokenData.id_token,
+          timeSkew: tokenData.expires_in // Optional: provide timeSkew if available
+      });
+
+      if (keycloak.authenticated) {
+        toast({
+          title: "Login Successful",
+          description: "Redirecting to your dashboard...",
         });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error_description || 'Login failed');
-        }
-        
-        const tokenData = await response.json();
-        // Manually update Keycloak tokens
-        // This is tricky and `keycloak-js` is meant to manage this via its init/login flows.
-        // Doing this manually can lead to inconsistencies.
-        // It's better to let keycloak.init() handle the tokens after a redirect,
-        // or use a library more suited for custom UI + DAG.
-        // For now, if successful, Keycloak session should be established.
-        // We will re-initialize to pick up the session.
-        await keycloak.clearToken(); // Clear any old tokens
-        await keycloak.init({ 
-            onLoad: 'login-required', 
-            pkceMethod: 'S256',
-            // token: tokenData.access_token, // This is not how keycloak-js usually ingests tokens
-            // refreshToken: tokenData.refresh_token,
-            // idToken: tokenData.id_token,
-        });
-
-
-        if (keycloak.authenticated) {
-          toast({
-            title: "Login Successful",
-            description: "Redirecting to your dashboard...",
-          });
-          router.push("/dashboard/my-videos");
-        } else {
-          toast({ title: "Login Failed", description: "Please check your credentials.", variant: "destructive" });
-        }
+        router.push("/dashboard/my-videos");
+      } else {
+        // This path might be taken if keycloak.init() with tokens doesn't result in an authenticated state as expected.
+        // This could be due to Keycloak server config or limitations of keycloak-js with manual token injection.
+        toast({ title: "Login session could not be established.", description: "Please try again or contact support.", variant: "destructive" });
+      }
 
     } catch (error: any) {
       console.error("Login error:", error);
@@ -173,7 +148,7 @@ export function LoginForm() {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
               control={form.control}
-              name="email" // Changed to email, can be username or email for Keycloak
+              name="email"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Username or Email</FormLabel>
