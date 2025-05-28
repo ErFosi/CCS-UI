@@ -111,15 +111,28 @@ export function LoginForm() {
         });
         router.push("/dashboard/my-videos");
       } else {
+        // This part might be tricky. If init succeeds with tokens but authenticated is false,
+        // it could mean the tokens are invalid or session couldn't be established.
         toast({ title: "Login session could not be established.", description: "Keycloak did not confirm authentication after token init.", variant: "destructive" });
       }
 
     } catch (error: any) {
-      console.error("Login error:", error);
-      let description = error.message || "An unexpected error occurred during login.";
-      if (error.message.toLowerCase().includes('failed to fetch')) {
-        description = `Failed to fetch from Keycloak token endpoint: ${tokenUrl}. Please check network connectivity, CORS settings on Keycloak, and SSL certificate if using HTTPS.`;
+      console.error("Login error (raw object):", error);
+      let description = "An unexpected error occurred during login.";
+      if (error && error.message) {
+        description = error.message;
+        // Check if the error is specifically a "Failed to fetch"
+        if (error.name === 'TypeError' && error.message.toLowerCase().includes('failed to fetch')) {
+          description = `Failed to fetch from Keycloak token endpoint: ${tokenUrl}. This is often due to:
+1. Network Connectivity: Ensure Keycloak server at ${keycloakUrl} is reachable.
+2. CORS (Cross-Origin Resource Sharing): Verify Keycloak's 'Web Origins' for client '${keycloakClientId}' includes your app's origin (e.g., http://localhost:9002).
+3. SSL Certificate: If using HTTPS, your browser must trust Keycloak's SSL certificate. Self-signed certificates often cause this.
+Please check your browser's Network tab for details on the failed request to the token endpoint.`;
+        }
+      } else if (typeof error === 'string') {
+        description = error;
       }
+      
       toast({
         title: "Login Failed",
         description: description,
