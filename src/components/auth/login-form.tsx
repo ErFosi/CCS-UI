@@ -36,7 +36,7 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { keycloak, isLoading: authIsLoading } = useAuth();
+  const { keycloak, isLoading: authIsLoading } = useAuth(); // keycloak instance from AuthProvider
   const [isSubmitting, setIsSubmitting] = useState(false);
 
 
@@ -65,12 +65,8 @@ export function LoginForm() {
       return;
     }
 
-    if (!keycloak) {
-      toast({ title: "Authentication service not ready", description: "Keycloak instance is not available.", variant: "destructive" });
-      setIsSubmitting(false);
-      return;
-    }
-
+    // We use Direct Access Grant here by POSTing to the token endpoint
+    // keycloak.login() is more for redirect-based flows.
     const tokenUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/token`;
 
     try {
