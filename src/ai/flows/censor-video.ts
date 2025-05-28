@@ -66,4 +66,3 @@ const censorVideoFlow = ai.defineFlow(
     return {censoredVideoDataUri: input.videoDataUri};
   }
 );
-```
