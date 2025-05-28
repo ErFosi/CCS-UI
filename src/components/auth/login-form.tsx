@@ -21,18 +21,14 @@ import { useTheme } from "@/context/theme-context";
 import { useAuth } from "@/context/auth-context";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-// Removed jwt-decode as it's no longer needed here
+
+// Removed jwt-decode as it's no longer needed here for DAG
 
 const formSchema = z.object({
-  // Username and password fields are still needed for the form,
-  // but Keycloak's page will handle the actual credential validation.
-  // You might choose to remove them if you always redirect,
-  // or keep them if you might re-introduce a direct grant attempt later for other reasons.
-  // For now, we'll keep them but the primary action is keycloak.login().
-  username: z.string().min(1, { // Kept for UI consistency, but won't be sent directly by this form
+  username: z.string().min(1, {
     message: "Username is required.",
   }),
-  password: z.string().min(1, { // Kept for UI consistency
+  password: z.string().min(1, { // Kept for UI, but Keycloak's page will validate
     message: "Password is required.",
   }),
 });
@@ -40,8 +36,8 @@ const formSchema = z.object({
 export function LoginForm() {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { login, isLoading: authIsLoading, keycloak } = useAuth(); // Use login from AuthContext
-  const [isSubmitting, setIsSubmitting] = useState(false); // To disable button during redirect initiation
+  const { login, isLoading: authIsLoading, keycloak } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -52,18 +48,19 @@ export function LoginForm() {
   });
 
   useEffect(() => {
+    const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL;
+    const keycloakRealm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM;
+    const keycloakClientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID;
     console.log("[CLIENT] LoginForm ENV CHECK:", {
-      url: process.env.NEXT_PUBLIC_KEYCLOAK_URL,
-      realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM,
-      clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID,
+      url: keycloakUrl,
+      realm: keycloakRealm,
+      clientId: keycloakClientId,
     });
   }, []);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // Values from the form (username, password) are not directly used here for token fetching.
-    // We will redirect to Keycloak's login page.
     setIsSubmitting(true);
-    console.log(`[CLIENT] LoginForm: onSubmit - Attempting to redirect to Keycloak login.`);
+    console.log(`[CLIENT] LoginForm: onSubmit - Attempting Keycloak login with username hint: ${values.username}`);
 
     if (!keycloak) {
       toast({
@@ -76,16 +73,24 @@ export function LoginForm() {
     }
 
     try {
-      // This will redirect the user to Keycloak's login page.
-      // Keycloak will handle credentials and then redirect back.
-      await login(); // login function from useAuth now calls keycloak.login()
-      // The page will redirect, so code here might not execute if redirect is immediate.
-      // We don't expect to reach here if redirect is successful.
+      // Initiate Keycloak's standard login flow (redirect to Keycloak's page)
+      // Pass username as a hint. Keycloak handles actual password validation.
+      // Specify redirectUri to come back to the dashboard after successful Keycloak login.
+      const redirectUri = `${window.location.origin}/dashboard/my-videos`;
+      console.log(`[CLIENT] LoginForm: Calling keycloak.login() with options: loginHint=${values.username}, redirectUri=${redirectUri}`);
+      await login({ 
+        loginHint: values.username,
+        redirectUri: redirectUri 
+      });
+      // The page will redirect to Keycloak. Code here might not execute if redirect is immediate.
+      // We don't expect to reach here if redirect to Keycloak is successful.
+      // If it does, it means keycloak.login() itself failed before redirecting.
+      console.log("[CLIENT] LoginForm: keycloak.login() was called. Waiting for redirect.");
     } catch (error: any) {
       console.error("[CLIENT] LoginForm: Error during keycloak.login() initiation:", error);
       toast({
         title: "Login Initiation Failed",
-        description: error.message || "Could not redirect to login page. Check console for details.",
+        description: error.message || "Could not redirect to Keycloak login page. Check console.",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -140,7 +145,7 @@ export function LoginForm() {
               )}
             />
             <Button type="submit" className="w-full !bg-primary hover:!bg-primary/90 text-primary-foreground" disabled={isSubmitting || authIsLoading}>
-              {isSubmitting || authIsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {(isSubmitting || authIsLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Sign In
             </Button>
           </form>
