@@ -11,7 +11,7 @@ const getApiUrl = (): string => {
     // For now, let's use a placeholder that will likely fail, to make it obvious
     return "http://localhost:0/api_url_not_configured"; 
   }
-  console.log(`[API_CLIENT - BROWSER] Using API Base URL: ${apiUrl}`); // Added log
+  // console.log(`[API_CLIENT - BROWSER] Using API Base URL: ${apiUrl}`);
   return apiUrl;
 };
 
@@ -24,7 +24,7 @@ async function fetchWithAuth<T = any>(
   path: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const apiUrl = getApiUrl(); // This will now log the apiUrl
+  const apiUrl = getApiUrl();
   const fullUrl = `${apiUrl}${path}`;
   const headers = new Headers(options.headers || {});
 
@@ -32,6 +32,7 @@ async function fetchWithAuth<T = any>(
     headers.append('Authorization', `Bearer ${options.token}`);
   }
 
+  // Don't set Content-Type for FormData, browser does it with boundary
   if (!(options.body instanceof FormData) && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
     if (!headers.has('Content-Type')) {
       headers.append('Content-Type', 'application/json');
@@ -46,19 +47,24 @@ async function fetchWithAuth<T = any>(
   });
 
   if (!response.ok) {
-    let errorData;
+    let errorData: any = { detail: `Request failed with status ${response.status} ${response.statusText}` };
     try {
-      errorData = await response.json();
+      const responseText = await response.text(); // Read text first
+      if (responseText) {
+        errorData = JSON.parse(responseText); // Try to parse as JSON
+      }
     } catch (e) {
-      errorData = { detail: response.statusText || `Request failed with status ${response.status}` };
+      // If JSON parsing fails or response is empty, use statusText or generic message
+      console.warn(`[API_CLIENT - BROWSER] Could not parse error response as JSON for ${path}. Status: ${response.status}`, e);
     }
+    const errorMessage = errorData?.detail || errorData?.message || `Request failed with status ${response.status} ${response.statusText || 'Unknown error'}`;
     console.error(`[API_CLIENT - BROWSER] API Error ${response.status} for ${path}:`, errorData);
-    throw new Error(errorData.detail || `Request failed with status ${response.status}`);
+    throw new Error(errorMessage);
   }
 
   const contentType = response.headers.get("content-type");
 
-  if (response.status === 204 || !contentType) {
+  if (response.status === 204 || !contentType) { // Handle No Content
     return undefined as T; 
   }
 

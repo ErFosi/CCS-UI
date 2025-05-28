@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { VideoPlayer } from '@/components/videos/video-player';
 import { useVideoContext } from '@/context/video-context';
 import { useToast } from '@/hooks/use-toast';
-import { UploadCloud, Loader2, AlertTriangle, Image as ImageIcon, Video } from 'lucide-react'; // Added ImageIcon, Video
+import { UploadCloud, Loader2, AlertTriangle, Image as ImageIcon, Video } from 'lucide-react';
 
-const MAX_FILE_SIZE_MB = 50; // Kept from previous logic
+const MAX_FILE_SIZE_MB = 50;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 export default function UploadPage() {
@@ -20,14 +20,14 @@ export default function UploadPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileType, setFileType] = useState<'video' | 'image' | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // Renamed from isUploading for clarity with API
-  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null); // For client-side validation errors
   const [videoMetadata, setVideoMetadata] = useState<{ width: number; height: number } | null>(null);
 
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const { uploadVideo } = useVideoContext(); // Using new context function
+  const { uploadVideo } = useVideoContext();
   const { toast } = useToast();
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -38,13 +38,14 @@ export default function UploadPage() {
     setError(null);
     setFileType(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""; // Reset file input
+      fileInputRef.current.value = ""; 
     }
 
     if (selectedFile) {
       if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
-        setError(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
-        toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
+        const errorMsg = `File is too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`;
+        setError(errorMsg);
+        toast({ title: "File Too Large", description: `Cannot upload. ${errorMsg}`, variant: "destructive" });
         return;
       }
       
@@ -57,7 +58,6 @@ export default function UploadPage() {
         }
         currentFileType = 'video';
       } else if (selectedFile.type.startsWith("image/")) {
-        // Allow common image types
         const allowedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
         if (!allowedImageTypes.includes(selectedFile.type)) {
           setError("Invalid image type. Please upload JPEG, PNG, GIF or WEBP.");
@@ -103,7 +103,7 @@ export default function UploadPage() {
   const handleVideoLoad = (event: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const videoElement = event.currentTarget;
     setVideoMetadata({ width: videoElement.videoWidth, height: videoElement.videoHeight });
-    setError(null); // Clear errors related to video loading
+    setError(null);
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -115,32 +115,38 @@ export default function UploadPage() {
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setError(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
-      toast({ title: "File Too Large", description: `Cannot upload. Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
+      const errorMsg = `File is too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`;
+      setError(errorMsg);
+      toast({ title: "File Too Large", description: `Cannot upload. ${errorMsg}`, variant: "destructive" });
       return;
     }
 
     setIsProcessing(true);
-    setError(null);
+    setError(null); // Clear client-side errors before API call
 
     if (fileType === 'video') {
-        toast({ title: "Video Upload Started", description: "Your video is being uploaded..." });
+        toast({ title: "Video Upload Started", description: "Your video is being sent to the server..." });
         try {
-            await uploadVideo(file, file.name); // VideoContext handles UI updates
+            // uploadVideo from context now handles API call and UI updates via placeholders
+            await uploadVideo(file, file.name); 
             // On success, VideoContext's toast should show. We can optionally navigate.
+            // Don't reset form here, context updates will show the video as 'uploading' or 'processing'
+            // If you want to stay on the page:
+            // setFile(null); setPreviewUrl(null); setFileType(null); if (fileInputRef.current) fileInputRef.current.value = "";
+            // Or navigate:
             router.push('/dashboard/my-videos');
-        } catch (errCatch) { // This catch might be redundant if context handles toast for its errors
+        } catch (errCatch) { 
+            // This catch in the component might be redundant if VideoContext shows a toast for its errors.
+            // However, it can be useful for component-specific error display if needed.
             console.error("Upload error in component (video):", errCatch);
             const errorMessage = errCatch instanceof Error ? errCatch.message : "An unexpected error occurred during video upload.";
-            setError(`Upload failed: ${errorMessage}`);
-            toast({ title: "Video Upload Failed", description: errorMessage, variant: "destructive" });
+            // setError(`Upload failed: ${errorMessage}`); // Display error in the form if needed
+            // Toast is likely already handled by VideoContext
         } finally {
             setIsProcessing(false);
         }
     } else if (fileType === 'image') {
-        // Placeholder for image handling, as per previous logic
         toast({ title: "Image Selected", description: "Image processing features are planned for the future. This image won't be uploaded yet.", duration: 5000 });
-        // Reset form for now or navigate
         setFile(null);
         setPreviewUrl(null);
         setFileType(null);
@@ -222,6 +228,7 @@ export default function UploadPage() {
               <div className="space-y-2">
                 <Label>Image Preview</Label>
                 <div className="aspect-video w-full overflow-hidden rounded-lg bg-muted flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={previewUrl} alt="Image preview" className="max-h-full max-w-full object-contain" />
                 </div>
                  <div className="flex items-center text-sm p-2 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
@@ -230,7 +237,7 @@ export default function UploadPage() {
               </div>
             )}
 
-            {error && (
+            {error && ( // This error state is for client-side validation errors
               <div className="flex items-center text-sm text-destructive p-3 bg-destructive/10 border border-destructive/20 rounded-md">
                 <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {error}
               </div>
@@ -240,7 +247,7 @@ export default function UploadPage() {
         <CardFooter>
           <Button
             type="submit"
-            onClick={handleSubmit}
+            onClick={handleSubmit} // This button is outside the form tag, ensure form is submitted
             className="w-full !bg-primary hover:!bg-primary/90 text-primary-foreground"
             disabled={!canSubmit}
           >

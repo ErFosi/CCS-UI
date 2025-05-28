@@ -4,13 +4,13 @@
 import type { VideoAsset } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { useAuth } from './auth-context';
-import { listVideosApi, uploadVideoApi, getVideoApi, setPreferenceApi } from '@/lib/apiClient'; // Assuming apiClient.ts is in src/lib
+import { listVideosApi, uploadVideoApi, getVideoApi, setPreferenceApi } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 
 interface VideoContextType {
   videos: VideoAsset[];
   isLoading: boolean;
-  error: string | null;
+  error: string | null; // General context error, less used now for individual ops
   fetchVideos: () => Promise<void>;
   uploadVideo: (file: File, originalName: string) => Promise<void>;
   downloadVideo: (video: VideoAsset) => Promise<void>;
@@ -19,31 +19,12 @@ interface VideoContextType {
 
 const VideoContext = createContext<VideoContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'secureGuardAIVideos_v2'; // Updated key if structure changes
-
 export const VideoProvider = ({ children }: { children: ReactNode }) => {
   const [videos, setVideos] = useState<VideoAsset[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false); // Primarily for initial fetchVideos
+  const [error, setError] = useState<string | null>(null); // General context error
   const { getToken, isAuthenticated } = useAuth();
   const { toast } = useToast();
-
-  // Load videos from local storage initially (optional, API is source of truth)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedVideos = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (savedVideos) {
-        // setVideos(JSON.parse(savedVideos)); // Consider if this is needed or if API is always primary
-      }
-    }
-  }, []);
-
-  // Save videos to local storage (optional)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(videos));
-    }
-  }, [videos]);
 
   const fetchVideos = useCallback(async () => {
     if (!isAuthenticated) {
@@ -53,7 +34,7 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
     }
     const token = await getToken();
     if (!token) {
-      setError("Authentication token not available.");
+      setError("Authentication token not available for fetching videos.");
       toast({ title: "Authentication Error", description: "Could not retrieve auth token.", variant: "destructive" });
       return;
     }
@@ -97,24 +78,25 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
     setVideos(prev => [placeholderVideo, ...prev]);
 
     const formData = new FormData();
-    formData.append('file', file, originalName); // FastAPI expects 'file'
+    formData.append('file', file, originalName);
 
     try {
       console.log(`[VideoContext] Uploading video: ${originalName} with tempId: ${tempId}`);
-      const uploadedVideoData = await uploadVideoApi(formData, token); // Assuming API returns the new VideoAsset
+      const uploadedVideoData = await uploadVideoApi(formData, token);
       
-      // Replace placeholder with actual data from API response
       setVideos(prev => prev.map(v => v.id === tempId ? { ...uploadedVideoData, status: uploadedVideoData.status || 'uploaded' } : v));
-      toast({ title: "Upload Successful", description: `${originalName} has been uploaded.`, variant: "default" });
-      
-      // Optionally, re-fetch all videos to ensure consistency if API response is minimal
+      toast({ title: "Upload Successful", description: `${originalName} has been processed by the server.`, variant: "default" });
+      // Optionally, re-fetch all videos to ensure consistency if API response is minimal or further processing happens
       // await fetchVideos(); 
 
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to upload video";
-      console.error(`[VideoContext] Error uploading video ${originalName}:`, err);
+    } catch (errCatch) {
+      const errorMessage = errCatch instanceof Error ? errCatch.message : "Failed to upload video";
+      console.error(`[VideoContext] Error uploading video ${originalName}:`, errCatch);
+      // Update placeholder with error status
       setVideos(prev => prev.map(v => v.id === tempId ? { ...v, status: 'failed', error: errorMessage } : v));
       toast({ title: "Upload Failed", description: errorMessage, variant: "destructive" });
+      // Re-throw the error if the calling component needs to handle it further
+      // throw errCatch; 
     }
   };
 
@@ -129,7 +111,6 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
-    // Use video.filename if available and different from video.name, otherwise use video.name
     const filenameForApi = video.filename || video.name;
     if (!filenameForApi) {
         toast({ title: "Download Error", description: "Video filename is missing.", variant: "destructive" });
