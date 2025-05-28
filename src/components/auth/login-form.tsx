@@ -36,7 +36,7 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const { theme } = useTheme(); 
-  const { keycloak, isLoading: authIsLoading, login: keycloakLoginMethod } = useAuth(); // Using login from context
+  const { keycloak, isLoading: authIsLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
 
@@ -49,56 +49,59 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!keycloak) {
-      toast({ title: "Authentication service not ready", variant: "destructive" });
+    setIsSubmitting(true);
+
+    const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL;
+    const keycloakRealm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM;
+    const keycloakClientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID;
+
+    if (!keycloakUrl || !keycloakRealm || !keycloakClientId) {
+      toast({
+        title: "Configuration Error",
+        description: "Keycloak configuration (URL, Realm, Client ID) is missing. Please check .env file.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
       return;
     }
-    setIsSubmitting(true);
+
+    if (!keycloak) {
+      toast({ title: "Authentication service not ready", description: "Keycloak instance is not available.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+    
+    const tokenUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/token`;
+
     try {
-      // Attempting Direct Access Grant (Password Grant)
-      // This sends username and password directly to Keycloak's token endpoint.
-      // This approach is used to keep the custom UI for login.
-      
-      const tokenUrl = `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`;
-      
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'password',
-          client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID!,
-          username: values.email, // Keycloak uses 'username' field for this grant
+          client_id: keycloakClientId,
+          username: values.email,
           password: values.password,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Keycloak token exchange failed:", errorData);
-        throw new Error(errorData.error_description || 'Login failed. Please check credentials.');
+        const errorData = await response.json().catch(() => ({ error_description: `HTTP error ${response.status} from Keycloak. No further details.` }));
+        console.error("Keycloak token exchange failed:", errorData, "Status:", response.status);
+        throw new Error(errorData.error_description || `Login failed. Keycloak responded with status ${response.status}.`);
       }
       
       const tokenData = await response.json();
-
-      // After successfully getting tokens, we need to inform keycloak-js about them.
-      // This is a tricky part as keycloak-js is primarily designed for redirect-based flows.
-      // Manually setting tokens can be complex. The `keycloak.init()` with new tokens is one way,
-      // but its success in establishing a full session this way can vary.
       
-      await keycloak.clearToken(); // Clear any existing tokens
+      await keycloak.clearToken(); 
 
-      // Re-initialize keycloak with the new tokens.
-      // This will attempt to establish the session based on the tokens obtained.
-      // Note: `onLoad: 'login-required'` might trigger redirects if not handled carefully.
-      // For a pure SPA flow after DAG, `check-sso` or a custom token storage might be better.
-      // The `token`, `refreshToken`, `idToken` can be passed to init.
       await keycloak.init({ 
-          onLoad: 'check-sso', // check-sso is safer here than login-required
+          onLoad: 'check-sso', 
           pkceMethod: 'S256',
           token: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           idToken: tokenData.id_token,
-          timeSkew: tokenData.expires_in // Optional: provide timeSkew if available
+          timeSkew: tokenData.expires_in 
       });
 
       if (keycloak.authenticated) {
@@ -108,16 +111,18 @@ export function LoginForm() {
         });
         router.push("/dashboard/my-videos");
       } else {
-        // This path might be taken if keycloak.init() with tokens doesn't result in an authenticated state as expected.
-        // This could be due to Keycloak server config or limitations of keycloak-js with manual token injection.
-        toast({ title: "Login session could not be established.", description: "Please try again or contact support.", variant: "destructive" });
+        toast({ title: "Login session could not be established.", description: "Keycloak did not confirm authentication after token init.", variant: "destructive" });
       }
 
     } catch (error: any) {
       console.error("Login error:", error);
+      let description = error.message || "An unexpected error occurred during login.";
+      if (error.message.toLowerCase().includes('failed to fetch')) {
+        description = `Failed to fetch from Keycloak token endpoint: ${tokenUrl}. Please check network connectivity, CORS settings on Keycloak, and SSL certificate if using HTTPS.`;
+      }
       toast({
         title: "Login Failed",
-        description: error.message || "An unexpected error occurred.",
+        description: description,
         variant: "destructive",
       });
     } finally {
