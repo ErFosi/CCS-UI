@@ -18,12 +18,15 @@ export default function DashboardLayout({
   const router = useRouter();
 
   useEffect(() => {
+    console.log(`[CLIENT] DashboardLayout:useEffect - isLoading: ${isLoading}, isAuthenticated: ${isAuthenticated}`);
     if (!isLoading && !isAuthenticated) {
+      console.log("[CLIENT] DashboardLayout:useEffect - Not authenticated and not loading, redirecting to /login");
       router.replace('/login');
     }
   }, [isAuthenticated, isLoading, router]);
 
   if (isLoading) {
+    console.log("[CLIENT] DashboardLayout: Rendering loading spinner (isLoading is true)");
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -33,6 +36,7 @@ export default function DashboardLayout({
   }
 
   if (!isAuthenticated) {
+    console.log("[CLIENT] DashboardLayout: Rendering redirecting to login (isAuthenticated is false, isLoading is false)");
     // This helps prevent flicker before redirect effect runs
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -42,6 +46,7 @@ export default function DashboardLayout({
     );
   }
 
+  console.log("[CLIENT] DashboardLayout: Rendering dashboard content (isAuthenticated is true)");
   return (
     <SidebarProvider defaultOpen={true}>
       <AppSidebar />

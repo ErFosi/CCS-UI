@@ -11,10 +11,13 @@ export default function HomePage() {
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
+    console.log(`[CLIENT] HomePage:useEffect - isLoading: ${isLoading}, isAuthenticated: ${isAuthenticated}`);
     if (!isLoading) {
       if (isAuthenticated) {
+        console.log("[CLIENT] HomePage:useEffect - Authenticated, redirecting to /dashboard/my-videos");
         router.replace('/dashboard/my-videos');
       } else {
+        console.log("[CLIENT] HomePage:useEffect - Not authenticated, redirecting to /login");
         router.replace('/login');
       }
     }

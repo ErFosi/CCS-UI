@@ -4,7 +4,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-// Removed useRouter as we'll use window.location for hard redirect
 import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +34,7 @@ const formSchema = z.object({
 export function LoginForm() {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { isLoading: authIsLoading } = useAuth();
+  const { isLoading: authIsLoading } = useAuth(); // Use isLoading from AuthContext to disable button during auth init
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -95,14 +94,18 @@ export function LoginForm() {
         if (tokenData.id_token) localStorage.setItem('kc_id_token', tokenData.id_token);
         if (tokenData.expires_in) localStorage.setItem('kc_expires_in', tokenData.expires_in.toString());
         
-        console.log("[CLIENT] LoginForm: Tokens stored in localStorage. Forcing full page navigation to /dashboard/my-videos");
+        console.log("[CLIENT] LoginForm: Tokens stored in localStorage. Forcing full page navigation to /dashboard/my-videos", {
+            accessStored: !!localStorage.getItem('kc_access_token'),
+            refreshStored: !!localStorage.getItem('kc_refresh_token'),
+            idStored: !!localStorage.getItem('kc_id_token'),
+        });
+        
         toast({
           title: "Login Successful",
           description: "Redirecting to dashboard...",
         });
         
-        // Force a full page reload to ensure AuthProvider initializes fresh with new tokens
-        window.location.href = "/dashboard/my-videos"; 
+        window.location.href = "/dashboard/my-videos"; // Force full page reload
 
       } else {
         console.error("[CLIENT] LoginForm: Access token not received from Keycloak despite 200 OK.");
