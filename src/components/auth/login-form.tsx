@@ -35,7 +35,7 @@ const formSchema = z.object({
 export function LoginForm() {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { isLoading: authIsLoading } = useAuth();
+  const { isLoading: authIsLoading } = useAuth(); // Renamed to avoid conflict
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -61,6 +61,10 @@ export function LoginForm() {
     const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL;
     const keycloakRealm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM;
     const keycloakClientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID;
+
+    const expectedIssuer = `${keycloakUrl}/realms/${keycloakRealm}`;
+    console.log(`[CLIENT] LoginForm: Expected Issuer based on .env: ${expectedIssuer}`);
+
 
     if (!keycloakUrl || !keycloakRealm || !keycloakClientId) {
       toast({
@@ -108,7 +112,12 @@ export function LoginForm() {
         console.log("[CLIENT] LoginForm: Tokens received from Direct Access Grant.");
         localStorage.setItem('kc_access_token', tokenData.access_token);
         if (tokenData.refresh_token) localStorage.setItem('kc_refresh_token', tokenData.refresh_token);
-        if (tokenData.id_token) localStorage.setItem('kc_id_token', tokenData.id_token);
+        // id_token might not always be returned by DAG, handle its absence
+        if (tokenData.id_token) {
+            localStorage.setItem('kc_id_token', tokenData.id_token);
+        } else {
+            localStorage.removeItem('kc_id_token'); // Ensure it's cleared if not present
+        }
         if (tokenData.expires_in) localStorage.setItem('kc_expires_in', tokenData.expires_in.toString());
         
         console.log("[CLIENT] LoginForm: Tokens stored in localStorage. Forcing full page navigation to /dashboard/my-videos", {
@@ -120,8 +129,18 @@ export function LoginForm() {
         try {
           const decodedToken: any = jwtDecode(tokenData.access_token);
           console.log("[CLIENT] LoginForm: Decoded access token payload from app:", decodedToken);
-          console.log("[CLIENT] LoginForm: Decoded 'iss' claim from app's access token:", decodedToken.iss);
+          const tokenIssuer = decodedToken.iss;
+          console.log("[CLIENT] LoginForm: Decoded 'iss' claim from app's access token:", tokenIssuer);
           console.log("[CLIENT] LoginForm: Decoded 'aud' claim from app's access token:", decodedToken.aud);
+          if (tokenIssuer !== expectedIssuer) {
+            console.error(`CRITICAL ISSUER MISMATCH! Token 'iss': ${tokenIssuer}, Expected 'iss' (from .env): ${expectedIssuer}`);
+            toast({
+                title: "Token Issuer Mismatch",
+                description: `Token issuer '${tokenIssuer}' does not match expected '${expectedIssuer}'. API calls will likely fail. Check frontend .env and backend OIDC_ISSUER config.`,
+                variant: "destructive",
+                duration: 9000,
+            });
+          }
         } catch (decodeError) {
           console.error("[CLIENT] LoginForm: Error decoding access token from app:", decodeError);
         }
@@ -143,7 +162,7 @@ export function LoginForm() {
       let description = "An unexpected error occurred during login.";
       if (error && error.message) {
         description = error.message;
-        if (error.message.toLowerCase().includes('failed to fetch')) { // Check for 'failed to fetch' specifically
+        if (error.message.toLowerCase().includes('failed to fetch')) { 
           description = `Failed to fetch from Keycloak token endpoint: ${tokenUrl}. This is often due to:
 1. Network Connectivity: Ensure Keycloak server at ${keycloakUrl} is reachable.
 2. CORS (Cross-Origin Resource Sharing): Verify Keycloak's 'Web Origins' for client '${keycloakClientId}' includes your app's origin (e.g., ${typeof window !== 'undefined' ? window.location.origin : 'your_app_origin'}).
