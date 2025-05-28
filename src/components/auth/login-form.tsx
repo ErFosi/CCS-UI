@@ -36,9 +36,8 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { keycloak, isLoading: authIsLoading } = useAuth(); // keycloak instance from AuthProvider
+  const { isLoading: authIsLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -65,11 +64,10 @@ export function LoginForm() {
       return;
     }
 
-    // We use Direct Access Grant here by POSTing to the token endpoint
-    // keycloak.login() is more for redirect-based flows.
     const tokenUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/token`;
 
     try {
+      console.log(`Attempting to fetch token from: ${tokenUrl} for client: ${keycloakClientId}`);
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -95,14 +93,15 @@ export function LoginForm() {
         if (tokenData.refresh_token) localStorage.setItem('kc_refresh_token', tokenData.refresh_token);
         if (tokenData.id_token) localStorage.setItem('kc_id_token', tokenData.id_token);
         if (tokenData.expires_in) localStorage.setItem('kc_expires_in', tokenData.expires_in.toString());
-
-
+        
+        console.log("Tokens stored in localStorage. Navigating to dashboard...");
         toast({
           title: "Login Successful",
           description: "Tokens obtained. Redirecting to establish session...",
         });
-        // Navigate to the dashboard. AuthProvider will run its initializeKeycloak
-        // which will now pick up these tokens from localStorage.
+        
+        // IMPORTANT: Do NOT call keycloak.init() here.
+        // AuthProvider will handle initialization on the next page load using these stored tokens.
         router.push("/dashboard/my-videos");
 
       } else {
