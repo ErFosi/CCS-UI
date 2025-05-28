@@ -22,20 +22,18 @@ import { useAuth } from "@/context/auth-context";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
-
+// Schema for user registration, matching typical Keycloak fields
 const registerFormSchema = z.object({
   username: z.string().min(3, { message: "Username must be at least 3 characters." }),
-  email: z.string().email({
-    message: "Invalid email address.",
-  }),
+  email: z.string().email({ message: "Invalid email address." }),
   firstName: z.string().min(1, { message: "First name is required." }),
   lastName: z.string().min(1, { message: "Last name is required." }),
-  password: z.string().min(6, { // Keycloak typically has password policies
-    message: "Password must be at least 6 characters.",
-  }),
-  confirmPassword: z.string().min(6, {
-    message: "Password must be at least 6 characters.",
-  }),
+  password: z.string().min(8, { message: "Password must be at least 8 characters." }) 
+    .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter."})
+    .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter."})
+    .regex(/[0-9]/, { message: "Password must contain at least one number."})
+    .regex(/[^a-zA-Z0-9]/, { message: "Password must contain at least one special character."}), // Example for special char
+  confirmPassword: z.string(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords do not match.",
   path: ["confirmPassword"], 
@@ -46,7 +44,7 @@ export type RegisterFormValues = z.infer<typeof registerFormSchema>;
 export function RegisterForm() {
   const { toast } = useToast();
   const { theme } = useTheme(); 
-  const { keycloak, isLoading: authIsLoading } = useAuth();
+  const { keycloak, isLoading: authIsLoading, register } = useAuth(); // Using register from useAuth
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<RegisterFormValues>({
@@ -63,62 +61,52 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    console.log("[CLIENT] RegisterForm: Attempting registration with (raw form values):", values);
+    console.log("[CLIENT] RegisterForm: Attempting registration. Form values:", values);
 
-    // IMPORTANT: Direct user registration via Keycloak Admin API from a public client
-    // (like this Next.js app) is NOT recommended and generally not possible without 
-    // insecurely exposing admin credentials or using a backend proxy.
-    // The `keycloak-js` library's `register()` method typically redirects to Keycloak's 
-    // own registration page if user registration is enabled in the realm settings.
-
-    // To use THIS custom UI form for registration that creates a user directly in Keycloak
-    // with all these fields, you typically need:
-    // 1. A backend API endpoint (e.g., in your FastAPI backend).
-    // 2. This frontend form POSTs the data to your backend API.
-    // 3. Your backend API (configured as a confidential client or using a service account for Keycloak) 
-    //    then uses Keycloak's Admin REST API to create the user.
-    // This is the secure and standard way to handle user creation from a custom UI.
-
-    // For this frontend example, we will continue to simulate initiating the process.
-    // In a real scenario, replace the console.log and toast below with an API call to YOUR backend.
-    
-    try {
-      console.log("[CLIENT] RegisterForm: Registration Data to send to backend:", {
-        username: values.username,
-        email: values.email,
-        firstName: values.firstName,
-        lastName: values.lastName,
-        // IMPORTANT: The password should ONLY be sent from this client to YOUR secure backend over HTTPS.
-        // Your backend would then hash it or pass it to Keycloak as required by Keycloak's API.
-        password: values.password, 
-      });
-
-      toast({
-        title: "Registration Initiated (Simulation)",
-        description: "Account creation request data collected. For actual user creation, backend integration with Keycloak Admin API is required via a secure backend endpoint.",
-        duration: 7000, // Longer duration for this important message
-      });
-      
-      // Example of how one *might* redirect to Keycloak's own registration page if it's enabled.
-      // This would bypass your custom form data (firstName, lastName etc.) unless Keycloak's
-      // registration flow is customized to ask for them.
-      // if (keycloak && keycloak.authenticated === false) { // Check if not already authenticated
-      //   keycloak.register(); // This redirects to Keycloak's page
-      // } else {
-      //   console.warn("[CLIENT] RegisterForm: Keycloak instance not available or user already authenticated, cannot redirect to Keycloak registration page.");
-      // }
-
-      form.reset(); // Reset form after "submission"
-    } catch (error: any) {
-      console.error("[CLIENT] RegisterForm: Registration submission error:", error);
-      toast({
-        title: "Registration Failed",
-        description: error.message || "Could not process registration request.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
+    // Option 1: Redirect to Keycloak's own registration page (recommended for simplicity if acceptable)
+    if (keycloak && register) { 
+        console.log("[CLIENT] RegisterForm: Initiating Keycloak standard registration flow (redirect).");
+        try {
+            // You could pass email and username as hints if your Keycloak registration page theme is customized to use them.
+            // The `register` function from AuthContext will call keycloak.register().
+            await register({
+                // loginHint: values.username, // Example: if Keycloak page uses it
+            });
+            // If successful, this will redirect the browser to Keycloak's registration page.
+            // Code below this point might not execute if the redirect happens immediately.
+        } catch (error: any) {
+            console.error("[CLIENT] RegisterForm: Error initiating Keycloak registration redirect:", error);
+            toast({
+                title: "Registration Error",
+                description: error.message || "Could not redirect to Keycloak registration page. Ensure user registration is enabled in your Keycloak realm settings.",
+                variant: "destructive",
+            });
+            setIsSubmitting(false); // Only set if redirect fails to initiate
+        }
+        return; // Exit after attempting redirect-based registration
     }
+
+    // Option 2: (Placeholder for custom backend integration if redirect is not used)
+    // This part is a simulation if you don't use Keycloak's registration page.
+    // For actual user creation with this custom form, your backend MUST securely call Keycloak's Admin API.
+    console.warn("[CLIENT] RegisterForm: Keycloak instance or register function not available for redirect. Falling back to simulation.");
+    console.log("[CLIENT] RegisterForm: Registration Data to send to backend (simulation):", {
+      username: values.username,
+      email: values.email,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      password: values.password, // Password should ONLY be sent to YOUR secure backend over HTTPS.
+    });
+
+    toast({
+      title: "Registration Data Collected (Simulation)",
+      description: "To complete registration with this custom form, your application backend needs to securely call Keycloak's Admin API. Using Keycloak's own registration page (triggered by 'Sign Up') is generally recommended for simpler integration if enabled in your Keycloak realm.",
+      variant: "default",
+      duration: 10000, // Longer duration for this important message
+    });
+    
+    // form.reset(); // Optionally reset form after "simulated submission"
+    setIsSubmitting(false);
   }
   
   const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
@@ -134,14 +122,14 @@ export function RegisterForm() {
             height={90}
             className="rounded-sm"
             data-ai-hint="company logo"
-            priority
+            priority // Added priority
             key={theme} 
           />
         </div>
       </CardHeader>
-      <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-6">
+      <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-4">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3"> {/* Reduced space-y */}
             <FormField
               control={form.control}
               name="username"
@@ -168,7 +156,7 @@ export function RegisterForm() {
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"> {/* Reduced gap */}
               <FormField
                 control={form.control}
                 name="firstName"

@@ -21,8 +21,7 @@ import { useTheme } from "@/context/theme-context";
 import { useAuth } from "@/context/auth-context";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-
-// Removed jwt-decode as it's no longer needed here for DAG
+// Removed jwt-decode as it's not needed for redirect flow
 
 const formSchema = z.object({
   username: z.string().min(1, {
@@ -60,7 +59,7 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
-    console.log(`[CLIENT] LoginForm: onSubmit - Attempting Keycloak login with username hint: ${values.username}`);
+    console.log(`[CLIENT] LoginForm: onSubmit - Attempting Keycloak login redirect with username hint: ${values.username}`);
 
     if (!keycloak) {
       toast({
@@ -77,14 +76,14 @@ export function LoginForm() {
       // Pass username as a hint. Keycloak handles actual password validation.
       // Specify redirectUri to come back to the dashboard after successful Keycloak login.
       const redirectUri = `${window.location.origin}/dashboard/my-videos`;
-      console.log(`[CLIENT] LoginForm: Calling keycloak.login() with options: loginHint=${values.username}, redirectUri=${redirectUri}`);
+      console.log(`[CLIENT] LoginForm: Calling keycloak.login() via AuthContext with options: loginHint=${values.username}, redirectUri=${redirectUri}`);
+      
       await login({ 
         loginHint: values.username,
         redirectUri: redirectUri 
       });
       // The page will redirect to Keycloak. Code here might not execute if redirect is immediate.
       // We don't expect to reach here if redirect to Keycloak is successful.
-      // If it does, it means keycloak.login() itself failed before redirecting.
       console.log("[CLIENT] LoginForm: keycloak.login() was called. Waiting for redirect.");
     } catch (error: any) {
       console.error("[CLIENT] LoginForm: Error during keycloak.login() initiation:", error);

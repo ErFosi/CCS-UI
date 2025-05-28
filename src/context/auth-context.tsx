@@ -11,7 +11,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   user: UserProfile | null;
   keycloak: Keycloak | null;
-  login: (options?: Keycloak.KeycloakLoginOptions) => Promise<void>; // login now accepts options
+  login: (options?: Keycloak.KeycloakLoginOptions) => Promise<void>;
   logout: () => Promise<void>;
   register: (options?: Keycloak.KeycloakRegisterOptions) => Promise<void>;
   getToken: () => Promise<string | undefined>;
@@ -182,7 +182,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const onAuthLogout = () => {
-      console.log('[CLIENT] Keycloak EVENT: onAuthLogout triggered.');
+      console.log('[CLIENT] Keycloak EVENT: onAuthLogout triggered. Stack trace:', new Error().stack);
       setIsAuthenticated(false); 
       setUser(null);
       setIsLoading(false);
@@ -254,7 +254,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.log('[CLIENT] AuthProvider:logout - Logout initiated.');
       setIsLoading(true); 
       try {
-        // Clear any manually stored tokens as a precaution, though keycloak.logout should handle its own session.
+        // Clear any manually stored tokens as a precaution, though not used in redirect flow
         localStorage.removeItem('kc_access_token'); 
         localStorage.removeItem('kc_refresh_token');
         localStorage.removeItem('kc_id_token');
@@ -280,7 +280,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const register = useCallback(async (options?: Keycloak.KeycloakRegisterOptions) => {
     if (keycloak) {
-      console.log('[CLIENT] AuthProvider:register - Standard Keycloak registration initiated (redirect flow).');
+      console.log('[CLIENT] AuthProvider:register - Standard Keycloak registration initiated (redirect flow). Options:', options);
       setIsLoading(true);
       try {
         await keycloak.register(options);
@@ -314,10 +314,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('[CLIENT] AuthProvider:getToken - Error updating token. Session might be invalid.', error);
       // Potentially trigger logout or error state if token update fails critically
-      // For now, we just return the current token, which might be undefined or expired.
-      setIsAuthenticated(false); // Assume session is lost if refresh fails
+      setIsAuthenticated(false); 
       setUser(null);
-      setIsLoading(false); // Ensure loading is false
+      setIsLoading(false); 
       return undefined;
     }
     return keycloak.token;
