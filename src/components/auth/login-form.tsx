@@ -19,11 +19,11 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/context/theme-context";
 import { useAuth } from "@/context/auth-context";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
 const formSchema = z.object({
-  username: z.string().min(1, {
+  username: z.string().min(1, { // Changed from email to username
     message: "Username is required.",
   }),
   password: z.string().min(1, {
@@ -34,7 +34,7 @@ const formSchema = z.object({
 export function LoginForm() {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { isLoading: authIsLoading } = useAuth(); // Use isLoading from AuthContext to disable button during auth init
+  const { isLoading: authIsLoading } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -44,6 +44,15 @@ export function LoginForm() {
       password: "",
     },
   });
+
+  // Debug log for env vars
+  useEffect(() => {
+    console.log("[CLIENT] LoginForm ENV CHECK:", {
+      url: process.env.NEXT_PUBLIC_KEYCLOAK_URL,
+      realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM,
+      clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID,
+    });
+  }, []);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
@@ -68,24 +77,32 @@ export function LoginForm() {
     console.log(`[CLIENT] LoginForm: Attempting Direct Access Grant to: ${tokenUrl}`);
 
     try {
+      const requestBody = new URLSearchParams({
+        grant_type: 'password',
+        client_id: keycloakClientId,
+        username: values.username,
+        password: values.password,
+        // Removed explicit scope to match the user's working curl command
+      });
+      
+      console.log("[CLIENT] LoginForm: Token request body:", requestBody.toString());
+
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'password',
-          client_id: keycloakClientId,
-          username: values.username,
-          password: values.password,
-        }),
+        body: requestBody,
       });
 
+      const tokenData = await response.json();
+      console.log("[CLIENT] LoginForm: Keycloak token response:", tokenData);
+
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error_description: `HTTP error ${response.status} from Keycloak. No further details.` }));
-        console.error("[CLIENT] LoginForm: Keycloak token exchange failed:", errorData, "Status:", response.status);
-        throw new Error(errorData.error_description || `Login failed. Keycloak responded with status ${response.status}.`);
+        const errorDescription = tokenData.error_description || `HTTP error ${response.status} from Keycloak. No further details.`;
+        console.error("[CLIENT] LoginForm: Keycloak token exchange failed:", tokenData, "Status:", response.status);
+        throw new Error(errorDescription);
       }
 
-      const tokenData = await response.json();
 
       if (tokenData.access_token) {
         console.log("[CLIENT] LoginForm: Tokens received from Direct Access Grant.");
@@ -108,7 +125,7 @@ export function LoginForm() {
         window.location.href = "/dashboard/my-videos"; // Force full page reload
 
       } else {
-        console.error("[CLIENT] LoginForm: Access token not received from Keycloak despite 200 OK.");
+        console.error("[CLIENT] LoginForm: Access token not received from Keycloak despite 200 OK. Full response:", tokenData);
         throw new Error("Access token not received from Keycloak.");
       }
 
@@ -147,12 +164,12 @@ Please check your browser's Network tab for details on the failed request to the
           <Image
             src={logoSrc}
             alt="SecureGuard AI Logo"
-            width={160}
-            height={90}
-            className="rounded-sm"
+            width={160} 
+            height={90} 
+            className="rounded-sm" // Removed w-auto h-auto as width/height props define aspect ratio
             data-ai-hint="company logo"
             priority
-            key={theme}
+            key={theme} 
           />
         </div>
       </CardHeader>
