@@ -5,13 +5,13 @@ import type { VideoAsset } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { VideoPlayer } from './video-player';
-import { Download, Clock, AlertTriangle, CheckCircle2, Video, Loader2, PlayCircle, Trash2 } from 'lucide-react';
+import { Download, Clock, AlertTriangle, CheckCircle2, Video, Loader2, PlayCircle, Trash2, Wand2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, isValid, parseISO } from 'date-fns';
 import { useVideoContext } from '@/context/video-context';
 import { useAuth } from '@/context/auth-context';
-import { getVideoApi } from '@/lib/apiClient'; // Assuming this is for direct blob fetching
+import { getVideoApi } from '@/lib/apiClient'; 
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   AlertDialog,
@@ -30,7 +30,7 @@ interface VideoCardProps {
 }
 
 export function VideoCard({ video }: VideoCardProps) {
-  const { downloadVideo: downloadVideoFromContext, deleteVideo } = useVideoContext();
+  const { downloadVideo: downloadVideoFromContext, deleteVideo, processVideo } = useVideoContext();
   const { getToken } = useAuth();
 
   const [originalPlayerSrc, setOriginalPlayerSrc] = useState<string | null>(null);
@@ -43,14 +43,14 @@ export function VideoCard({ video }: VideoCardProps) {
   }, [video]);
 
   const loadVideoForPreview = useCallback(async (videoApiUrl: string | undefined, videoFilenameForApi: string, setSrc: (url: string | null) => void) => {
-    if (!videoApiUrl || !videoFilenameForApi) { // videoApiUrl is constructed URL, videoFilenameForApi is just the name for the API call
+    if (!videoApiUrl || !videoFilenameForApi) {
       setSrc(null);
       return;
     }
     
     setIsLoadingPreview(true);
     setPreviewError(null);
-    setSrc(null); 
+    // Don't setSrc(null) here if it might cause infinite loops with useEffect. Manage by checking isLoadingPreview.
 
     const token = await getToken();
     if (!token) {
@@ -60,7 +60,6 @@ export function VideoCard({ video }: VideoCardProps) {
     }
 
     try {
-      // getVideoApi expects only the filename part, not the full constructed URL
       const blob = await getVideoApi(videoFilenameForApi, token);
       const objectUrl = URL.createObjectURL(blob);
       setSrc(objectUrl);
@@ -68,7 +67,7 @@ export function VideoCard({ video }: VideoCardProps) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load video preview";
       console.error(`[VideoCard] Error fetching video blob for ${videoFilenameForApi}:`, err);
       setPreviewError(errorMessage);
-      setSrc(null);
+      setSrc(null); 
     } finally {
       setIsLoadingPreview(false);
     }
@@ -83,7 +82,13 @@ export function VideoCard({ video }: VideoCardProps) {
                 currentOriginalSrc = src;
              });
         }
-    } else {
+    } else if (video.status === 'uploading' && video.originalUrl?.startsWith('blob:')) {
+      // For placeholder during upload, use the blob URL directly if provided
+      setOriginalPlayerSrc(video.originalUrl);
+      currentOriginalSrc = video.originalUrl;
+    }
+     else {
+        if (originalPlayerSrc?.startsWith('blob:')) URL.revokeObjectURL(originalPlayerSrc);
         setOriginalPlayerSrc(null);
     }
     return () => {
@@ -95,9 +100,8 @@ export function VideoCard({ video }: VideoCardProps) {
 
   useEffect(() => {
     let currentCensoredSrc: string | null = null;
-    if (video.status === 'censored' && video.censoredUrl && video.filename) {
-        // Assuming censored version uses the same filename for API call, or you have a video.censoredFilename
-        const filenameForCensored = video.filename; // Adjust if censored has a different key/filename
+    if (video.status === 'censored' && video.censoredUrl && (video.processedFilename || video.filename)) {
+        const filenameForCensored = video.processedFilename || video.filename; 
         if (!censoredPlayerSrc?.startsWith('blob:')) {
             loadVideoForPreview(video.censoredUrl, filenameForCensored, (src) => {
                 setCensoredPlayerSrc(src);
@@ -105,6 +109,7 @@ export function VideoCard({ video }: VideoCardProps) {
             });
         }
     } else {
+        if (censoredPlayerSrc?.startsWith('blob:')) URL.revokeObjectURL(censoredPlayerSrc);
         setCensoredPlayerSrc(null);
     }
     return () => {
@@ -112,21 +117,22 @@ export function VideoCard({ video }: VideoCardProps) {
         URL.revokeObjectURL(currentCensoredSrc);
       }
     };
-  }, [video.censoredUrl, video.filename, video.status, video.id, loadVideoForPreview, censoredPlayerSrc]);
+  }, [video.censoredUrl, video.processedFilename, video.filename, video.status, video.id, loadVideoForPreview, censoredPlayerSrc]);
 
   const handleDownload = (type: 'original' | 'censored') => {
-    // Use video.filename for the download, as it's the key part
     downloadVideoFromContext(video, type);
   };
   
   const handleDelete = () => {
     if (!video.filename) {
-        // console.error("Cannot delete video: filename is missing.", video);
-        // Potentially show a toast error
         return;
     }
     deleteVideo(video.id, video.filename);
   };
+
+  const handleProcessVideo = () => {
+    processVideo(video);
+  }
 
 
   const getStatusBadge = () => {
@@ -138,7 +144,7 @@ export function VideoCard({ video }: VideoCardProps) {
       case 'failed':
         return <Badge variant="destructive"><AlertTriangle className="mr-1 h-4 w-4" />Failed</Badge>;
       case 'uploaded':
-        return <Badge variant="outline" className="bg-yellow-400 text-black"><Clock className="mr-1 h-4 w-4" />Processing</Badge>;
+        return <Badge variant="outline" className="bg-yellow-400 text-black"><Clock className="mr-1 h-4 w-4" />Uploaded</Badge>;
       case 'uploading':
          return <Badge variant="secondary" className="animate-pulse"><Loader2 className="mr-1 h-4 w-4 animate-spin" />Uploading</Badge>;
       default:
@@ -165,7 +171,7 @@ export function VideoCard({ video }: VideoCardProps) {
         </div>
       );
     }
-    if (previewError && !src) {
+    if (previewError && !src) { // Only show error if src is not set (meaning loading failed)
          return (
             <div className="flex flex-col items-center justify-center h-48 bg-destructive/10 rounded-md text-destructive p-4">
                 <AlertTriangle className="w-12 h-12 mb-2" />
@@ -185,7 +191,6 @@ export function VideoCard({ video }: VideoCardProps) {
             </div>
         );
     }
-    // Ensure videoApiUrl and videoFilenameForApi are passed for the retry button
     const canRetry = videoApiUrl && videoFilenameForApi;
     return (
       <div className="flex flex-col items-center justify-center h-48 bg-muted rounded-md">
@@ -225,7 +230,7 @@ export function VideoCard({ video }: VideoCardProps) {
         
         <Tabs defaultValue="original" className="w-full mt-2">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="original" disabled={!video.originalUrl && video.status !== 'uploading'}>Original</TabsTrigger>
+              <TabsTrigger value="original" disabled={video.status === 'uploading' && !video.originalUrl?.startsWith('blob:')}>Original</TabsTrigger>
               <TabsTrigger value="censored" disabled={video.status !== 'censored' || !video.censoredUrl}>
                 Censored Version
               </TabsTrigger>
@@ -234,11 +239,21 @@ export function VideoCard({ video }: VideoCardProps) {
               {renderVideoPreview(originalPlayerSrc, 'original', video.originalUrl, video.filename)}
             </TabsContent>
             <TabsContent value="censored" className="mt-4">
-              {renderVideoPreview(censoredPlayerSrc, 'censored', video.censoredUrl, video.filename)}
+              {renderVideoPreview(censoredPlayerSrc, 'censored', video.censoredUrl, video.processedFilename || video.filename)}
             </TabsContent>
           </Tabs>
       </CardContent>
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
+        {video.status === 'uploaded' && (
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={handleProcessVideo}
+                className="border-primary text-primary hover:bg-primary/10 hover:text-primary"
+            >
+                <Wand2 className="mr-2 h-4 w-4" /> Process Video
+            </Button>
+        )}
         {video.status !== 'uploading' && video.filename && (
           <Button
             variant="outline"
@@ -258,7 +273,7 @@ export function VideoCard({ video }: VideoCardProps) {
             <Download className="mr-2 h-4 w-4" /> Censored
           </Button>
         )}
-         {video.filename && ( // Allow deletion if filename exists
+         {video.filename && ( 
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" size="sm">

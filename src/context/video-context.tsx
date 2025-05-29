@@ -1,10 +1,10 @@
 
 "use client";
 
-import type { VideoAsset } from '@/lib/types';
+import type { VideoAsset, ProcessVideoApiResponse } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { useAuth } from './auth-context';
-import { listVideosApi, uploadVideoApi, getVideoApi, deleteVideoApi, getApiBaseUrl } from '@/lib/apiClient'; // Removed setPreferenceApi for now
+import { listVideosApi, uploadVideoApi, getVideoApi, deleteVideoApi, getApiBaseUrl, processVideoApi } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 import { isValid, parseISO } from 'date-fns';
 
@@ -14,9 +14,9 @@ interface VideoContextType {
   error: string | null;
   fetchVideos: () => Promise<void>;
   uploadVideo: (file: File, originalName: string) => Promise<void>;
-  downloadVideo: (video: VideoAsset, type: 'original' | 'censored') => Promise<void>; // type can be used if API differentiates
+  downloadVideo: (video: VideoAsset, type: 'original' | 'censored') => Promise<void>;
   deleteVideo: (videoId: string, filename: string) => Promise<void>;
-  // setPreference: (key: string, value: any) => Promise<void>; // Kept for future use if needed
+  processVideo: (videoToProcess: VideoAsset) => Promise<void>;
 }
 
 const VideoContext = createContext<VideoContextType | undefined>(undefined);
@@ -27,6 +27,7 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const { getToken, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const apiBaseUrl = getApiBaseUrl();
 
   const fetchVideos = useCallback(async () => {
     if (!isAuthenticated) {
@@ -47,30 +48,25 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
       const rawVideosFromApi = await listVideosApi(token);
       console.log("[VideoContext] Raw videos fetched from API:", JSON.stringify(rawVideosFromApi, null, 2));
       
-      const apiBaseUrl = getApiBaseUrl();
-
-      // Assuming rawVideosFromApi is an array of objects matching VideoAsset or adaptable to it
       const mappedVideos: VideoAsset[] = rawVideosFromApi.map((apiVideo: any) => {
         let uniqueId: string;
-        // Prioritize string 'id', then string 'filename' from API, then construct if needed
         if (apiVideo && typeof apiVideo.id === 'string' && apiVideo.id.trim() !== '') {
           uniqueId = apiVideo.id;
         } else if (apiVideo && typeof apiVideo.filename === 'string' && apiVideo.filename.trim() !== '') {
-          uniqueId = apiVideo.filename; // Use filename as ID if no explicit ID from API
+          uniqueId = apiVideo.filename; 
         } else {
-          // Fallback if API doesn't give a clear ID. This should be rare if API is well-designed.
           uniqueId = apiVideo.name || crypto.randomUUID(); 
         }
         
         return {
           id: uniqueId,
           name: apiVideo.name || apiVideo.filename || "Untitled Video",
-          filename: apiVideo.filename || apiVideo.name, // Critical: This should be the name S3 uses (e.g. "video.mp4")
+          filename: apiVideo.filename || apiVideo.name,
           originalUrl: apiVideo.originalUrl || (apiVideo.filename ? `${apiBaseUrl}/videos/${encodeURIComponent(apiVideo.filename)}` : undefined),
-          // censoredUrl needs similar mapping if your API provides it
-          censoredUrl: apiVideo.censoredUrl || (apiVideo.filename ? `${apiBaseUrl}/videos/censored/${encodeURIComponent(apiVideo.filename)}` : undefined),
-          uploadDate: apiVideo.uploadDate || new Date().toISOString(), // API should provide ISO string
-          status: apiVideo.status || 'uploaded', // API should provide status
+          censoredUrl: apiVideo.censoredUrl || (apiVideo.processedFilename ? `${apiBaseUrl}/videos/${encodeURIComponent(apiVideo.processedFilename)}` : undefined),
+          processedFilename: apiVideo.processedFilename,
+          uploadDate: apiVideo.uploadDate || new Date().toISOString(), 
+          status: apiVideo.status || 'uploaded', 
           error: apiVideo.error,
           originalWidth: apiVideo.originalWidth,
           originalHeight: apiVideo.originalHeight,
@@ -83,15 +79,16 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
 
       console.log("[VideoContext] Videos mapped and set successfully:", JSON.stringify(mappedVideos, null, 2));
       setVideos(mappedVideos);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to fetch videos";
+    } catch (errCatch) {
+      const err = errCatch as Error;
+      const errorMessage = err.message || "Failed to fetch videos";
       console.error("[VideoContext] Error fetching videos:", err);
       setError(errorMessage);
       toast({ title: "Failed to Load Videos", description: errorMessage, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-  }, [getToken, isAuthenticated, toast]);
+  }, [getToken, isAuthenticated, toast, apiBaseUrl]);
 
 
   const uploadVideo = async (file: File, originalName: string) => {
@@ -105,15 +102,14 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
-    const tempId = crypto.randomUUID(); // For optimistic UI update
-    const apiBaseUrl = getApiBaseUrl();
-
+    const tempId = crypto.randomUUID();
     const placeholderVideo: VideoAsset = {
       id: tempId,
       name: originalName,
-      filename: originalName, // Assume filename is originalName initially
+      filename: originalName, 
       uploadDate: new Date().toISOString(),
       status: 'uploading',
+      originalUrl: URL.createObjectURL(file) // Create a temporary URL for local preview during upload
     };
     setVideos(prev => [placeholderVideo, ...prev].sort((a, b) => {
         const dateA = a.uploadDate && isValid(parseISO(a.uploadDate)) ? parseISO(a.uploadDate).getTime() : 0;
@@ -125,21 +121,27 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
     formData.append('file', file, originalName);
 
     try {
-      const uploadedVideoDataFromApi = await uploadVideoApi(formData, token); // API returns VideoAsset
+      const uploadedVideoDataFromApi = await uploadVideoApi(formData, token);
       console.log("[VideoContext] Raw data from upload API:", JSON.stringify(uploadedVideoDataFromApi, null, 2));
       
       const finalId = uploadedVideoDataFromApi.id || uploadedVideoDataFromApi.filename || tempId;
-      
       const newVideo: VideoAsset = {
-        ...uploadedVideoDataFromApi, // Spread the API response
-        id: finalId, // Ensure ID is consistent
+        id: finalId,
         name: uploadedVideoDataFromApi.name || originalName,
-        filename: uploadedVideoDataFromApi.filename || originalName, // Ensure filename is correctly set
-        // Construct URLs if not provided by API, or use what API returns
+        filename: uploadedVideoDataFromApi.filename || originalName,
         originalUrl: uploadedVideoDataFromApi.originalUrl || (uploadedVideoDataFromApi.filename ? `${apiBaseUrl}/videos/${encodeURIComponent(uploadedVideoDataFromApi.filename)}` : undefined),
-        censoredUrl: uploadedVideoDataFromApi.censoredUrl, // Or construct similarly
-        status: uploadedVideoDataFromApi.status || 'uploaded', // API should confirm status
+        censoredUrl: uploadedVideoDataFromApi.censoredUrl,
+        processedFilename: uploadedVideoDataFromApi.processedFilename,
+        uploadDate: uploadedVideoDataFromApi.uploadDate || new Date().toISOString(),
+        status: uploadedVideoDataFromApi.status || 'uploaded',
+        error: uploadedVideoDataFromApi.error,
+        originalWidth: uploadedVideoDataFromApi.originalWidth,
+        originalHeight: uploadedVideoDataFromApi.originalHeight,
       };
+      
+      if (placeholderVideo.originalUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(placeholderVideo.originalUrl); // Revoke temp blob URL
+      }
 
       console.log("[VideoContext] New video object after upload:", JSON.stringify(newVideo, null, 2));
       setVideos(prev => prev.map(v => v.id === tempId ? newVideo : v)
@@ -153,7 +155,11 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
       const error = errCatch as Error;
       const errorMessage = error.message || "Failed to upload video";
       console.error(`[VideoContext] Error uploading video ${originalName}:`, error);
-      setVideos(prev => prev.map(v => v.id === tempId ? { ...v, status: 'failed', error: errorMessage } : v)
+      
+      if (placeholderVideo.originalUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(placeholderVideo.originalUrl); // Revoke temp blob URL on error too
+      }
+      setVideos(prev => prev.map(v => v.id === tempId ? { ...v, originalUrl: undefined, status: 'failed', error: errorMessage } : v)
                            .sort((a, b) => {
                                 const dateA = a.uploadDate && isValid(parseISO(a.uploadDate)) ? parseISO(a.uploadDate).getTime() : 0;
                                 const dateB = b.uploadDate && isValid(parseISO(b.uploadDate)) ? parseISO(b.uploadDate).getTime() : 0;
@@ -174,26 +180,37 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
-    // Use video.filename which should be the key for the API (e.g., "example.mp4")
-    const filenameForApi = video.filename; 
+    let filenameForApi = video.filename;
+    let downloadName = `${type}_${video.name || video.filename}`;
+
+    if (type === 'censored') {
+        if (video.processedFilename) {
+            filenameForApi = video.processedFilename;
+            downloadName = video.processedFilename; // Or a more user-friendly name
+        } else if (video.censoredUrl) {
+            // Attempt to extract filename from censoredUrl if processedFilename is not available
+            try {
+                const urlParts = video.censoredUrl.split('/');
+                filenameForApi = urlParts[urlParts.length -1];
+                downloadName = filenameForApi;
+            } catch (e) {
+                 toast({ title: "Download Error", description: "Censored video filename is unclear.", variant: "destructive" });
+                 return;
+            }
+        } else {
+            toast({ title: "Download Error", description: "Censored video is not available for download.", variant: "destructive" });
+            return;
+        }
+    }
+    
     if (!filenameForApi) {
         toast({ title: "Download Error", description: "Video filename is missing.", variant: "destructive" });
         return;
     }
 
-    // TODO: Differentiate URL if API needs it for original vs censored for download
-    let apiPathSuffix = filenameForApi;
-    if (type === 'censored' && video.censoredUrl && video.censoredUrl.includes('/censored/')) {
-      // If censoredUrl has a specific path, potentially adjust.
-      // This part is tricky if only filename is used for getVideoApi for both.
-      // For now, assuming getVideoApi(filename) gets the primary/original file.
-    }
-    
-    const downloadName = `${type}_${video.name || filenameForApi}`;
-
     toast({ title: "Download Started", description: `Preparing to download ${downloadName}...` });
     try {
-      const blob = await getVideoApi(apiPathSuffix, token); 
+      const blob = await getVideoApi(filenameForApi, token); 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -233,12 +250,50 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
       toast({ title: "Deletion Failed", description: errorMessage, variant: "destructive" });
     }
   };
+
+  const processVideo = async (videoToProcess: VideoAsset) => {
+    if (!isAuthenticated) {
+      toast({ title: "Authentication Required", description: "Please log in to process videos.", variant: "destructive" });
+      return;
+    }
+    const token = await getToken();
+    if (!token) {
+      toast({ title: "Authentication Error", description: "Could not retrieve auth token for processing.", variant: "destructive" });
+      return;
+    }
+    if (!videoToProcess.filename) {
+        toast({ title: "Processing Error", description: "Video filename is missing, cannot process.", variant: "destructive" });
+        return;
+    }
+
+    setVideos(prev => prev.map(v => v.id === videoToProcess.id ? { ...v, status: 'censoring' } : v));
+    toast({ title: "Processing Started", description: `Processing video: ${videoToProcess.name}`});
+
+    try {
+      const response = await processVideoApi(videoToProcess.filename, token);
+      setVideos(prev => prev.map(v => 
+        v.id === videoToProcess.id ? { 
+          ...v, 
+          status: 'censored', // Assuming "processed" from API means "censored" for UI
+          processedFilename: response.processed_filename,
+          censoredUrl: `${apiBaseUrl}/videos/${encodeURIComponent(response.processed_filename)}` // Construct URL for the processed video
+        } : v
+      ));
+      toast({ title: "Processing Successful", description: `${videoToProcess.name} has been processed.`, variant: "default" });
+    } catch (errCatch) {
+      const error = errCatch as Error;
+      const errorMessage = error.message || `Failed to process video ${videoToProcess.name}`;
+      console.error(`[VideoContext] Error processing video ${videoToProcess.name}:`, error);
+      setVideos(prev => prev.map(v => 
+        v.id === videoToProcess.id ? { ...v, status: 'failed', error: errorMessage } : v
+      ));
+      toast({ title: "Processing Failed", description: errorMessage, variant: "destructive" });
+    }
+  };
   
 
-  // const setPreference = async (key: string, value: any) => { ... }; // Kept for future
-
   return (
-    <VideoContext.Provider value={{ videos, isLoading, error, fetchVideos, uploadVideo, downloadVideo, deleteVideo }}>
+    <VideoContext.Provider value={{ videos, isLoading, error, fetchVideos, uploadVideo, downloadVideo, deleteVideo, processVideo }}>
       {children}
     </VideoContext.Provider>
   );
