@@ -66,7 +66,7 @@ export function RegisterForm() {
       email: values.email,
       firstName: values.firstName,
       lastName: values.lastName,
-      password: values.password,
+      password: values.password, // The backend will handle this securely with Keycloak
     };
     console.log("[CLIENT] RegisterForm: Attempting registration with (raw form values):", values);
     
@@ -82,14 +82,20 @@ export function RegisterForm() {
       });
 
       if (!response.ok) {
+        // Try to parse error from backend, otherwise use generic message
         let errorData;
         try {
             errorData = await response.json();
         } catch (parseError) {
+            // If response is not JSON or empty
             errorData = { detail: response.statusText || "Registration failed on the server." };
         }
         throw new Error(errorData.detail || `Server responded with ${response.status}`);
       }
+
+      // Assuming backend returns a success message or user object
+      // const responseData = await response.json(); 
+      // console.log("[CLIENT] RegisterForm: Backend registration response:", responseData);
 
       toast({
         title: "Account Creation Submitted!",
@@ -103,6 +109,7 @@ export function RegisterForm() {
     } catch (error: any) {
       console.error("[CLIENT] RegisterForm: Error during backend registration call:", error);
       let description = "Could not complete registration. Please check your details or contact support if the issue persists.";
+      // Check for specific "Failed to fetch" which often indicates network/SSL/CORS issues
       if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
         description = `Failed to connect to the registration server at ${backendRegisterUrl}. This could be due to network issues, CORS problems, or SSL certificate errors if using HTTPS (e.g., ERR_CERT_COMMON_NAME_INVALID). Please check the browser console for more details and ensure the backend server is correctly configured and accessible.`;
       } else if (error.message) {
@@ -112,7 +119,7 @@ export function RegisterForm() {
         title: "Registration Error",
         description: description,
         variant: "destructive",
-        duration: 10000,
+        duration: 10000, // Longer duration for important errors
       });
     } finally {
       setIsSubmitting(false);
@@ -137,7 +144,7 @@ export function RegisterForm() {
           />
         </div>
       </CardHeader>
-      <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-4">
+      <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-4"> {/* Adjusted max-h for scroll */}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
             <FormField
@@ -230,4 +237,3 @@ export function RegisterForm() {
     </Card>
   );
 }
- 
