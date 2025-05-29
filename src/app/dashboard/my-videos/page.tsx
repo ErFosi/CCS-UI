@@ -1,25 +1,29 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { VideoCard } from '@/components/videos/video-card';
-import { useVideoContext } from '@/context/video-context';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
-import { PlusCircle, VideoOff, UploadCloud, Loader2 } from 'lucide-react'; 
-import { UpgradePopup } from '@/components/premium/upgrade-popup';
-import { useAuth } from '@/context/auth-context';
+import { useEffect, useState } from "react";
+import { VideoCard } from "@/components/videos/video-card";
+import { useVideoContext } from "@/context/video-context";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { PlusCircle, VideoOff, UploadCloud, Loader2 } from "lucide-react";
+import { UpgradePopup } from "@/components/premium/upgrade-popup";
+import { useAuth } from "@/context/auth-context";
 
 export default function MyVideosPage() {
   const { videos, fetchVideos, isLoading: videosLoading, error: videosError } = useVideoContext();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
 
+  // Selected video id and whether processed or original
+  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [showProcessed, setShowProcessed] = useState(false);
+
   useEffect(() => {
-    const hasSeenPopup = localStorage.getItem('hasSeenSecureGuardAIUpgradePopup');
+    const hasSeenPopup = localStorage.getItem("hasSeenSecureGuardAIUpgradePopup");
     if (!hasSeenPopup) {
       const timer = setTimeout(() => {
         setShowUpgradePopup(true);
-        localStorage.setItem('hasSeenSecureGuardAIUpgradePopup', 'true');
+        localStorage.setItem("hasSeenSecureGuardAIUpgradePopup", "true");
       }, 500);
       return () => clearTimeout(timer);
     }
@@ -43,9 +47,39 @@ export default function MyVideosPage() {
       </div>
     );
   }
-  
-  // Filter out processed videos
-  const filteredVideos = videos.filter(video => !video.name.startsWith('processed_'));
+
+  // Separate original and processed videos
+  const originalVideos = videos.filter((v) => !v.name.startsWith("processed_"));
+  const processedVideosMap = new Map(
+    videos
+      .filter((v) => v.name.startsWith("processed_"))
+      .map((v) => [v.name.replace(/^processed_/, ""), v])
+  );
+
+  // If nothing selected, default select first original video
+  useEffect(() => {
+    if (!selectedVideoId && originalVideos.length > 0) {
+      setSelectedVideoId(originalVideos[0].id);
+      setShowProcessed(false);
+    }
+  }, [selectedVideoId, originalVideos]);
+
+  // Find currently selected video object (original or processed)
+  const selectedOriginalVideo = originalVideos.find((v) => v.id === selectedVideoId);
+  const selectedProcessedVideo = selectedOriginalVideo
+    ? processedVideosMap.get(selectedOriginalVideo.name)
+    : null;
+
+  // Decide which video to show
+  const videoToShow = showProcessed && selectedProcessedVideo ? selectedProcessedVideo : selectedOriginalVideo;
+
+  if (!videoToShow) {
+    return (
+      <div className="text-center py-16">
+        <p>No videos to display.</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -61,12 +95,15 @@ export default function MyVideosPage() {
         </div>
 
         {videosError && (
-          <div className="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-200 dark:text-red-800" role="alert">
+          <div
+            className="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-200 dark:text-red-800"
+            role="alert"
+          >
             <span className="font-medium">Error:</span> {videosError}
           </div>
         )}
 
-        {!videosError && filteredVideos.length === 0 && !videosLoading && (
+        {!videosError && originalVideos.length === 0 && !videosLoading && (
           <div className="flex flex-col items-center justify-center text-center py-16 px-4 border-2 border-dashed border-border rounded-lg bg-card">
             <VideoOff className="h-20 w-20 text-muted-foreground mb-6" />
             <h2 className="text-2xl font-semibold mb-2 text-foreground">No Videos Yet</h2>
@@ -81,13 +118,43 @@ export default function MyVideosPage() {
           </div>
         )}
 
-        {!videosError && filteredVideos.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6 xl:grid-cols-2">
-            {filteredVideos.map((video) => (
-              <VideoCard key={video.id} video={video} />
-            ))}
+        {/* Video selector bar */}
+        <div className="mb-6 flex flex-wrap gap-4">
+          {originalVideos.map((video) => (
+            <Button
+              key={video.id}
+              variant={video.id === selectedVideoId ? "default" : "outline"}
+              onClick={() => {
+                setSelectedVideoId(video.id);
+                setShowProcessed(false);
+              }}
+            >
+              {video.name}
+            </Button>
+          ))}
+        </div>
+
+        {/* Toggle to show processed or original */}
+        {selectedProcessedVideo && (
+          <div className="mb-6 flex items-center space-x-4">
+            <span>Show:</span>
+            <Button
+              variant={!showProcessed ? "default" : "outline"}
+              onClick={() => setShowProcessed(false)}
+            >
+              Original
+            </Button>
+            <Button
+              variant={showProcessed ? "default" : "outline"}
+              onClick={() => setShowProcessed(true)}
+            >
+              Processed (Censored)
+            </Button>
           </div>
         )}
+
+        {/* Show selected video */}
+        <VideoCard key={videoToShow.id} video={videoToShow} />
       </div>
     </>
   );
