@@ -1,10 +1,11 @@
-// "use client";
+
+"use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Image from 'next/image';
-import { useRouter } from "next/navigation";
+// Removed useRouter as we will use Keycloak's redirect
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -18,10 +19,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/context/theme-context";
+import { useAuth } from "@/context/auth-context"; // Import useAuth
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
-// Schema for user registration, matching typical Keycloak fields
+// Schema can remain for client-side validation if desired, though Keycloak will handle final validation.
 const registerFormSchema = z.object({
   username: z.string().min(3, { message: "Username must be at least 3 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
@@ -43,7 +45,7 @@ export type RegisterFormValues = z.infer<typeof registerFormSchema>;
 export function RegisterForm() {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const router = useRouter();
+  const { register, keycloak } = useAuth(); // Use register from AuthContext
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<RegisterFormValues>({
@@ -60,63 +62,44 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    // Exclude confirmPassword before sending to backend
-    const { confirmPassword, ...registrationData } = values;
-    
-    console.log("[CLIENT] RegisterForm: Attempting registration with (data to be sent):", registrationData);
-    
-    const backendRegisterUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/auth/register`;
-    console.log(`[CLIENT] RegisterForm: Will attempt to POST to backend URL: ${backendRegisterUrl}`);
+    console.log("[CLIENT] RegisterForm: Attempting to redirect to Keycloak registration page.");
+
+    if (!keycloak) {
+      toast({
+        title: "Initialization Error",
+        description: "Authentication service is not available. Please try again later.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
-      const response = await fetch(backendRegisterUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registrationData),
+      // This will redirect the user to Keycloak's registration page.
+      // Keycloak's page will handle the actual data input and user creation.
+      // We can pass the email as a hint if desired, but Keycloak might ignore it
+      // or use it to prefill its own form.
+      await register({
+        // You can pass redirectUri or other options here if needed,
+        // e.g., redirectUri: `${window.location.origin}/login`
+        // For now, using default behavior.
       });
-
-      if (!response.ok) {
-        let errorData;
-        try {
-            errorData = await response.json();
-        } catch (parseError) {
-            errorData = { detail: response.statusText || "Registration failed on the server." };
-        }
-        throw new Error(errorData.detail || `Server responded with ${response.status}`);
-      }
-      
-      // const responseData = await response.json(); // Assuming backend sends back some useful data
-      // console.log("[CLIENT] RegisterForm: Backend registration successful (response from backend):", responseData);
-
+      // The user will be redirected, so code below this might not execute
+      // if the redirect is immediate.
       toast({
-        title: "Registration Submitted!",
-        description: "Your account creation request has been sent. Please try logging in.",
-        variant: "default", // Changed from "success" to "default" as success implies user is created
-        duration: 7000,
+        title: "Redirecting to Registration",
+        description: "You are being redirected to the secure registration page.",
       });
-      form.reset();
-      router.push('/login'); // Redirect to login page
-
     } catch (error: any) {
-      console.error("[CLIENT] RegisterForm: Error during backend registration call:", error);
-      let description = "Could not complete registration. Please check your details or contact support if the issue persists.";
-      if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
-        let attemptedHostname = "your backend server";
-        try {
-          attemptedHostname = new URL(backendRegisterUrl).hostname;
-        } catch (e) { /* ignore parsing error if backendRegisterUrl is invalid */ }
-        
-        description = `Failed to connect to the registration server at ${backendRegisterUrl}. This could be due to network issues, CORS problems, or SSL certificate errors if using HTTPS (e.g., ERR_CERT_COMMON_NAME_INVALID for domain '${attemptedHostname}'). Please check the browser console for more details and ensure the backend server at ${attemptedHostname} is correctly configured and accessible.`;
-      } else if (error.message) {
-        description = error.message;
-      }
+      console.error("[CLIENT] RegisterForm: Error redirecting to Keycloak registration:", error);
       toast({
         title: "Registration Error",
-        description: description,
+        description: error.message || "Could not redirect to registration page. Please try again.",
         variant: "destructive",
-        duration: 10000,
       });
     } finally {
+      // setIsSubmitting might not be reached if redirect happens fast.
+      // No need to reset form as user is redirected.
       setIsSubmitting(false);
     }
   }
@@ -130,12 +113,12 @@ export function RegisterForm() {
           <Image
             src={logoSrc}
             alt="SecureGuard AI Logo"
-            width={160} // Restored original larger size
-            height={90}  // Restored original larger size
-            className="rounded-sm" // Removed w-auto h-auto as width/height props define size
+            width={160}
+            height={90}
+            className="rounded-sm"
             data-ai-hint="company logo"
             priority
-            key={theme} // Ensures re-render on theme change if src depends on it
+            key={theme}
           />
         </div>
       </CardHeader>
@@ -224,7 +207,7 @@ export function RegisterForm() {
             />
             <Button type="submit" className="w-full !bg-primary hover:!bg-primary/90 text-primary-foreground" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Sign Up
+              Create Account
             </Button>
           </form>
         </Form>
