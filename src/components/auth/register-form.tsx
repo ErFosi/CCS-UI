@@ -44,7 +44,7 @@ export type RegisterFormValues = z.infer<typeof registerFormSchema>;
 export function RegisterForm() {
   const { toast } = useToast();
   const { theme } = useTheme(); 
-  const { keycloak, isLoading: authIsLoading, register } = useAuth(); // Using register from useAuth
+  const { isLoading: authIsLoading } = useAuth(); // Only need isLoading for button state
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<RegisterFormValues>({
@@ -61,51 +61,39 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    console.log("[CLIENT] RegisterForm: Attempting registration. Form values:", values);
+    console.log("[CLIENT] RegisterForm: Attempting custom registration. Form values:", values);
 
-    // Option 1: Redirect to Keycloak's own registration page (recommended for simplicity if acceptable)
-    if (keycloak && register) { 
-        console.log("[CLIENT] RegisterForm: Initiating Keycloak standard registration flow (redirect).");
-        try {
-            // You could pass email and username as hints if your Keycloak registration page theme is customized to use them.
-            // The `register` function from AuthContext will call keycloak.register().
-            await register({
-                // loginHint: values.username, // Example: if Keycloak page uses it
-            });
-            // If successful, this will redirect the browser to Keycloak's registration page.
-            // Code below this point might not execute if the redirect happens immediately.
-        } catch (error: any) {
-            console.error("[CLIENT] RegisterForm: Error initiating Keycloak registration redirect:", error);
-            toast({
-                title: "Registration Error",
-                description: error.message || "Could not redirect to Keycloak registration page. Ensure user registration is enabled in your Keycloak realm settings.",
-                variant: "destructive",
-            });
-            setIsSubmitting(false); // Only set if redirect fails to initiate
-        }
-        return; // Exit after attempting redirect-based registration
-    }
+    // Simulate sending data to your backend
+    // In a real application, you would make an API call here:
+    // await fetch('/api/your-backend/register', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({
+    //     username: values.username,
+    //     email: values.email,
+    //     firstName: values.firstName,
+    //     lastName: values.lastName,
+    //     password: values.password, // Password should ONLY be sent to YOUR secure backend over HTTPS.
+    //   }),
+    // });
+    // Then handle the response from your backend.
 
-    // Option 2: (Placeholder for custom backend integration if redirect is not used)
-    // This part is a simulation if you don't use Keycloak's registration page.
-    // For actual user creation with this custom form, your backend MUST securely call Keycloak's Admin API.
-    console.warn("[CLIENT] RegisterForm: Keycloak instance or register function not available for redirect. Falling back to simulation.");
     console.log("[CLIENT] RegisterForm: Registration Data to send to backend (simulation):", {
       username: values.username,
       email: values.email,
       firstName: values.firstName,
       lastName: values.lastName,
-      password: values.password, // Password should ONLY be sent to YOUR secure backend over HTTPS.
+      // Do NOT log password in production, even on client for simulation
     });
 
     toast({
-      title: "Registration Data Collected (Simulation)",
-      description: "To complete registration with this custom form, your application backend needs to securely call Keycloak's Admin API. Using Keycloak's own registration page (triggered by 'Sign Up') is generally recommended for simpler integration if enabled in your Keycloak realm.",
+      title: "Registration Submitted (Simulation)",
+      description: "Your registration data has been collected. In a real app, this would be sent to a backend service to create your account in Keycloak. For now, no account is actually created.",
       variant: "default",
       duration: 10000, // Longer duration for this important message
     });
     
-    // form.reset(); // Optionally reset form after "simulated submission"
+    form.reset(); // Reset form after simulated submission
     setIsSubmitting(false);
   }
   
@@ -122,7 +110,7 @@ export function RegisterForm() {
             height={90}
             className="rounded-sm"
             data-ai-hint="company logo"
-            priority // Added priority
+            priority 
             key={theme} 
           />
         </div>
