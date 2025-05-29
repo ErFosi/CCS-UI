@@ -1,5 +1,4 @@
-
-"use client";
+// "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -61,18 +60,13 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    const registrationData = {
-      username: values.username,
-      email: values.email,
-      firstName: values.firstName,
-      lastName: values.lastName,
-      password: values.password, // The backend will handle this securely with Keycloak
-    };
-    console.log("[CLIENT] RegisterForm: Attempting registration with (raw form values):", values);
+    // Exclude confirmPassword before sending to backend
+    const { confirmPassword, ...registrationData } = values;
+    
+    console.log("[CLIENT] RegisterForm: Attempting registration with (data to be sent):", registrationData);
     
     const backendRegisterUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/auth/register`;
     console.log(`[CLIENT] RegisterForm: Will attempt to POST to backend URL: ${backendRegisterUrl}`);
-    console.log("[CLIENT] RegisterForm: Registration Data to send to backend:", registrationData);
 
     try {
       const response = await fetch(backendRegisterUrl, {
@@ -82,36 +76,37 @@ export function RegisterForm() {
       });
 
       if (!response.ok) {
-        // Try to parse error from backend, otherwise use generic message
         let errorData;
         try {
             errorData = await response.json();
         } catch (parseError) {
-            // If response is not JSON or empty
             errorData = { detail: response.statusText || "Registration failed on the server." };
         }
         throw new Error(errorData.detail || `Server responded with ${response.status}`);
       }
-
-      // Assuming backend returns a success message or user object
-      // const responseData = await response.json(); 
-      // console.log("[CLIENT] RegisterForm: Backend registration response:", responseData);
+      
+      // const responseData = await response.json(); // Assuming backend sends back some useful data
+      // console.log("[CLIENT] RegisterForm: Backend registration successful (response from backend):", responseData);
 
       toast({
-        title: "Account Creation Submitted!",
-        description: "Your registration request has been sent to the backend. If successful, you will be able to log in shortly. Please try logging in now.",
-        variant: "default",
+        title: "Registration Submitted!",
+        description: "Your account creation request has been sent. Please try logging in.",
+        variant: "default", // Changed from "success" to "default" as success implies user is created
         duration: 7000,
       });
       form.reset();
-      router.push('/login'); // Redirect to login page after submission
+      router.push('/login'); // Redirect to login page
 
     } catch (error: any) {
       console.error("[CLIENT] RegisterForm: Error during backend registration call:", error);
       let description = "Could not complete registration. Please check your details or contact support if the issue persists.";
-      // Check for specific "Failed to fetch" which often indicates network/SSL/CORS issues
       if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
-        description = `Failed to connect to the registration server at ${backendRegisterUrl}. This could be due to network issues, CORS problems, or SSL certificate errors if using HTTPS (e.g., ERR_CERT_COMMON_NAME_INVALID). Please check the browser console for more details and ensure the backend server is correctly configured and accessible.`;
+        let attemptedHostname = "your backend server";
+        try {
+          attemptedHostname = new URL(backendRegisterUrl).hostname;
+        } catch (e) { /* ignore parsing error if backendRegisterUrl is invalid */ }
+        
+        description = `Failed to connect to the registration server at ${backendRegisterUrl}. This could be due to network issues, CORS problems, or SSL certificate errors if using HTTPS (e.g., ERR_CERT_COMMON_NAME_INVALID for domain '${attemptedHostname}'). Please check the browser console for more details and ensure the backend server at ${attemptedHostname} is correctly configured and accessible.`;
       } else if (error.message) {
         description = error.message;
       }
@@ -119,7 +114,7 @@ export function RegisterForm() {
         title: "Registration Error",
         description: description,
         variant: "destructive",
-        duration: 10000, // Longer duration for important errors
+        duration: 10000,
       });
     } finally {
       setIsSubmitting(false);
@@ -135,16 +130,16 @@ export function RegisterForm() {
           <Image
             src={logoSrc}
             alt="SecureGuard AI Logo"
-            width={160}
-            height={90}
-            className="rounded-sm"
+            width={160} // Restored original larger size
+            height={90}  // Restored original larger size
+            className="rounded-sm" // Removed w-auto h-auto as width/height props define size
             data-ai-hint="company logo"
             priority
-            key={theme}
+            key={theme} // Ensures re-render on theme change if src depends on it
           />
         </div>
       </CardHeader>
-      <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-4"> {/* Adjusted max-h for scroll */}
+      <CardContent className="overflow-y-auto max-h-[calc(100vh-22rem)] space-y-4">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
             <FormField
