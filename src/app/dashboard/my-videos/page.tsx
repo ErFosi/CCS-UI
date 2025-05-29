@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -16,13 +15,12 @@ export default function MyVideosPage() {
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
 
   useEffect(() => {
-    // Changed localStorage key to be specific to new app name
     const hasSeenPopup = localStorage.getItem('hasSeenSecureGuardAIUpgradePopup');
     if (!hasSeenPopup) {
       const timer = setTimeout(() => {
         setShowUpgradePopup(true);
         localStorage.setItem('hasSeenSecureGuardAIUpgradePopup', 'true');
-      }, 500); // Delay popup slightly
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, []);
@@ -46,6 +44,9 @@ export default function MyVideosPage() {
     );
   }
   
+  // Filter out processed videos
+  const filteredVideos = videos.filter(video => !video.name.startsWith('processed_'));
+
   return (
     <>
       <UpgradePopup isOpen={showUpgradePopup} onClose={handleClosePopup} />
@@ -65,7 +66,7 @@ export default function MyVideosPage() {
           </div>
         )}
 
-        {!videosError && videos.length === 0 && !videosLoading && (
+        {!videosError && filteredVideos.length === 0 && !videosLoading && (
           <div className="flex flex-col items-center justify-center text-center py-16 px-4 border-2 border-dashed border-border rounded-lg bg-card">
             <VideoOff className="h-20 w-20 text-muted-foreground mb-6" />
             <h2 className="text-2xl font-semibold mb-2 text-foreground">No Videos Yet</h2>
@@ -80,9 +81,9 @@ export default function MyVideosPage() {
           </div>
         )}
 
-        {!videosError && videos.length > 0 && (
+        {!videosError && filteredVideos.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6 xl:grid-cols-2">
-            {videos.map((video) => (
+            {filteredVideos.map((video) => (
               <VideoCard key={video.id} video={video} />
             ))}
           </div>
