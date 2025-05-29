@@ -61,24 +61,49 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    console.log("[CLIENT] RegisterForm: Attempting custom registration. Form values:", values);
+    console.log("[CLIENT] RegisterForm: Attempting custom registration. Form values (excluding password for safety):", {
+      username: values.username,
+      email: values.email,
+      firstName: values.firstName,
+      lastName: values.lastName,
+    });
 
-    // Simulate sending data to your backend
-    // In a real application, you would make an API call here:
-    // await fetch('/api/your-backend/register', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({
-    //     username: values.username,
-    //     email: values.email,
-    //     firstName: values.firstName,
-    //     lastName: values.lastName,
-    //     password: values.password, // Password should ONLY be sent to YOUR secure backend over HTTPS.
-    //   }),
-    // });
-    // Then handle the response from your backend.
+    // In a real application, you would make an API call here to YOUR backend:
+    // 
+    // try {
+    //   const response = await fetch('/api/your-backend-for-registration', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({
+    //       username: values.username,
+    //       email: values.email,
+    //       firstName: values.firstName,
+    //       lastName: values.lastName,
+    //       password: values.password, // Password should ONLY be sent to YOUR secure backend over HTTPS.
+    //     }),
+    //   });
+    //   if (!response.ok) {
+    //     const errorData = await response.json();
+    //     throw new Error(errorData.detail || "Registration failed on the server.");
+    //   }
+    //   const result = await response.json();
+    //   toast({
+    //     title: "Registration Successful!",
+    //     description: result.message || "Your account has been created. Please log in.",
+    //     variant: "default",
+    //   });
+    //   form.reset();
+    // } catch (error: any) {
+    //   toast({
+    //     title: "Registration Error",
+    //     description: error.message || "Could not complete registration.",
+    //     variant: "destructive",
+    //   });
+    // } finally {
+    //   setIsSubmitting(false);
+    // }
 
-    console.log("[CLIENT] RegisterForm: Registration Data to send to backend (simulation):", {
+    console.log("[CLIENT] RegisterForm: Registration Data collected. Ready to send to backend (simulation):", {
       username: values.username,
       email: values.email,
       firstName: values.firstName,
@@ -87,13 +112,13 @@ export function RegisterForm() {
     });
 
     toast({
-      title: "Registration Submitted (Simulation)",
-      description: "Your registration data has been collected. In a real app, this would be sent to a backend service to create your account in Keycloak. For now, no account is actually created.",
+      title: "Registration Data Collected (Simulation)",
+      description: "Next Step: This data needs to be sent to your secure backend. Your backend will then use the Keycloak Admin API to create the user. No account is created by this frontend form alone.",
       variant: "default",
-      duration: 10000, // Longer duration for this important message
+      duration: 15000, // Longer duration for this important message
     });
     
-    form.reset(); // Reset form after simulated submission
+    // form.reset(); // Optionally reset form after simulated submission
     setIsSubmitting(false);
   }
   
