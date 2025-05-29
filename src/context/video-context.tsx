@@ -15,7 +15,7 @@ interface VideoContextType {
   fetchVideos: () => Promise<void>;
   uploadVideo: (file: File, originalName: string) => Promise<void>;
   downloadVideo: (video: VideoAsset, type: 'original' | 'censored') => Promise<void>;
-  deleteVideo: (videoId: string, filename: string) => Promise<void>;
+  deleteVideo: (videoId: string, filename: string, processedFilename?: string) => Promise<void>;
   processVideo: (videoToProcess: VideoAsset) => Promise<void>;
 }
 
@@ -45,7 +45,7 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const rawVideosFromApi = await listVideosApi(token);
+      const rawVideosFromApi = await listVideosApi(token); // Expects any[]
       console.log("[VideoContext] Raw videos fetched from API:", JSON.stringify(rawVideosFromApi, null, 2));
       
       const mappedVideos: VideoAsset[] = rawVideosFromApi.map((apiVideo: any) => {
@@ -53,15 +53,18 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
         if (apiVideo && typeof apiVideo.id === 'string' && apiVideo.id.trim() !== '') {
           uniqueId = apiVideo.id;
         } else if (apiVideo && typeof apiVideo.filename === 'string' && apiVideo.filename.trim() !== '') {
-          uniqueId = apiVideo.filename; 
+          // Use filename if it's a string and id isn't, common for S3 keys
+          uniqueId = apiVideo.filename;
         } else {
-          uniqueId = apiVideo.name || crypto.randomUUID(); 
+          // Fallback to ensure a unique string key for React
+          console.warn("[VideoContext] API video item missing string 'id' or 'filename'. Generating UUID for key. Item:", apiVideo);
+          uniqueId = crypto.randomUUID();
         }
         
         return {
           id: uniqueId,
           name: apiVideo.name || apiVideo.filename || "Untitled Video",
-          filename: apiVideo.filename || apiVideo.name,
+          filename: apiVideo.filename || apiVideo.name, // Essential for API calls
           originalUrl: apiVideo.originalUrl || (apiVideo.filename ? `${apiBaseUrl}/videos/${encodeURIComponent(apiVideo.filename)}` : undefined),
           censoredUrl: apiVideo.censoredUrl || (apiVideo.processedFilename ? `${apiBaseUrl}/videos/${encodeURIComponent(apiVideo.processedFilename)}` : undefined),
           processedFilename: apiVideo.processedFilename,
@@ -102,14 +105,14 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
-    const tempId = crypto.randomUUID();
+    const tempId = crypto.randomUUID(); // Guaranteed unique string
     const placeholderVideo: VideoAsset = {
       id: tempId,
       name: originalName,
       filename: originalName, 
       uploadDate: new Date().toISOString(),
       status: 'uploading',
-      originalUrl: URL.createObjectURL(file) // Create a temporary URL for local preview during upload
+      originalUrl: URL.createObjectURL(file) 
     };
     setVideos(prev => [placeholderVideo, ...prev].sort((a, b) => {
         const dateA = a.uploadDate && isValid(parseISO(a.uploadDate)) ? parseISO(a.uploadDate).getTime() : 0;
@@ -124,7 +127,16 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
       const uploadedVideoDataFromApi = await uploadVideoApi(formData, token);
       console.log("[VideoContext] Raw data from upload API:", JSON.stringify(uploadedVideoDataFromApi, null, 2));
       
-      const finalId = uploadedVideoDataFromApi.id || uploadedVideoDataFromApi.filename || tempId;
+      let finalId: string;
+      if (uploadedVideoDataFromApi && typeof uploadedVideoDataFromApi.id === 'string' && uploadedVideoDataFromApi.id.trim() !== '') {
+        finalId = uploadedVideoDataFromApi.id;
+      } else if (uploadedVideoDataFromApi && typeof uploadedVideoDataFromApi.filename === 'string' && uploadedVideoDataFromApi.filename.trim() !== '') {
+        finalId = uploadedVideoDataFromApi.filename;
+      } else {
+        finalId = tempId; // Fallback to tempId if API doesn't provide a good one
+        console.warn("[VideoContext] Upload API response missing string 'id' or 'filename'. Using tempId. Response:", uploadedVideoDataFromApi);
+      }
+
       const newVideo: VideoAsset = {
         id: finalId,
         name: uploadedVideoDataFromApi.name || originalName,
@@ -140,7 +152,7 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
       };
       
       if (placeholderVideo.originalUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(placeholderVideo.originalUrl); // Revoke temp blob URL
+        URL.revokeObjectURL(placeholderVideo.originalUrl); 
       }
 
       console.log("[VideoContext] New video object after upload:", JSON.stringify(newVideo, null, 2));
@@ -157,7 +169,7 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
       console.error(`[VideoContext] Error uploading video ${originalName}:`, error);
       
       if (placeholderVideo.originalUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(placeholderVideo.originalUrl); // Revoke temp blob URL on error too
+        URL.revokeObjectURL(placeholderVideo.originalUrl); 
       }
       setVideos(prev => prev.map(v => v.id === tempId ? { ...v, originalUrl: undefined, status: 'failed', error: errorMessage } : v)
                            .sort((a, b) => {
@@ -180,18 +192,17 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
-    let filenameForApi = video.filename;
+    let filenameForApi = video.filename; // This should be the key/filename for the API call
     let downloadName = `${type}_${video.name || video.filename}`;
 
     if (type === 'censored') {
         if (video.processedFilename) {
             filenameForApi = video.processedFilename;
-            downloadName = video.processedFilename; // Or a more user-friendly name
+            downloadName = video.processedFilename; 
         } else if (video.censoredUrl) {
-            // Attempt to extract filename from censoredUrl if processedFilename is not available
             try {
                 const urlParts = video.censoredUrl.split('/');
-                filenameForApi = urlParts[urlParts.length -1];
+                filenameForApi = decodeURIComponent(urlParts[urlParts.length -1]);
                 downloadName = filenameForApi;
             } catch (e) {
                  toast({ title: "Download Error", description: "Censored video filename is unclear.", variant: "destructive" });
@@ -228,7 +239,7 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const deleteVideo = async (videoId: string, filename: string) => {
+  const deleteVideo = async (videoId: string, filename: string, processedFilename?: string) => {
     if (!isAuthenticated) {
       toast({ title: "Authentication Required", description: "Please log in to delete videos.", variant: "destructive" });
       return;
@@ -239,8 +250,10 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    // Note: Backend should handle deleting both original and processed if applicable,
+    // based on the primary filename/key. Frontend just informs which primary video to delete.
     try {
-      await deleteVideoApi(filename, token);
+      await deleteVideoApi(filename, token); // Assumes backend handles associated processed file
       setVideos(prevVideos => prevVideos.filter(v => v.id !== videoId));
       toast({ title: "Video Deleted", description: `Video "${filename}" has been deleted.`, variant: "default" });
     } catch (err) {
@@ -270,13 +283,14 @@ export const VideoProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: "Processing Started", description: `Processing video: ${videoToProcess.name}`});
 
     try {
-      const response = await processVideoApi(videoToProcess.filename, token);
+      const response = await processVideoApi(videoToProcess.filename, token); // filename is the original S3 key
+      console.log("[VideoContext] Process video API response:", response);
       setVideos(prev => prev.map(v => 
         v.id === videoToProcess.id ? { 
           ...v, 
-          status: 'censored', // Assuming "processed" from API means "censored" for UI
+          status: 'censored', 
           processedFilename: response.processed_filename,
-          censoredUrl: `${apiBaseUrl}/videos/${encodeURIComponent(response.processed_filename)}` // Construct URL for the processed video
+          censoredUrl: `${apiBaseUrl}/videos/${encodeURIComponent(response.processed_filename)}`
         } : v
       ));
       toast({ title: "Processing Successful", description: `${videoToProcess.name} has been processed.`, variant: "default" });
@@ -306,3 +320,4 @@ export const useVideoContext = () => {
   }
   return context;
 };
+
