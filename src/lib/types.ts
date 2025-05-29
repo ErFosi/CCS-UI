@@ -1,19 +1,15 @@
 
 export interface VideoAsset {
-  id: string; // Should be provided by the backend for new videos
-  name: string; // User-provided or derived filename
-  filename?: string; // Actual filename used for API calls if different from name
+  id: string; // Should be unique, e.g., S3 key or backend-generated ID
+  name: string; // User-provided or derived filename for display
+  filename: string; // Actual filename used for API calls (e.g., "video.mp4" part of S3 key)
   
-  originalUrl?: string; // URL for the original video, expected from API
-  censoredUrl?: string; // URL for the censored video, expected from API
-  
-  originalDataUri?: string; // Fallback if URL not available, less common from API
-  censoredDataUri?: string; // Fallback if URL not available
+  originalUrl?: string; // Full URL constructed by frontend for streaming/download
+  censoredUrl?: string; // Full URL for censored version
 
+  uploadDate?: string; // ISO string
+  status: 'uploading' | 'uploaded' | 'censoring' | 'censored' | 'failed';
+  error?: string;
   originalWidth?: number;
   originalHeight?: number;
-  uploadDate?: string; // ISO string, expected from backend
-  status: 'uploading' | 'uploaded' | 'censoring' | 'censored' | 'failed'; // Statuses
-  error?: string;
-  // Add any other fields your FastAPI backend returns for a video
 }

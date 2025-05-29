@@ -10,7 +10,6 @@ export const getApiBaseUrl = (): string => {
     // Fallback or throw error, depending on desired behavior
     return "http://localhost:0/api_url_not_configured";
   }
-  // Log this only once or make it less verbose if needed
   // console.log(`[API_CLIENT - BROWSER] Using API Base URL: ${apiUrl}`);
   return apiUrl;
 };
@@ -18,14 +17,14 @@ export const getApiBaseUrl = (): string => {
 
 interface FetchOptions extends RequestInit {
   token?: string;
-  responseType?: 'blob' | 'json';
+  responseType?: 'blob' | 'json' | 'text'; // Added 'text' for responses without a body
 }
 
 async function fetchWithAuth<T = any>(
   path: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const apiUrl = getApiBaseUrl(); // Use the exported function
+  const apiUrl = getApiBaseUrl();
   const fullUrl = `${apiUrl}${path}`;
   const headers = new Headers(options.headers || {});
 
@@ -33,7 +32,8 @@ async function fetchWithAuth<T = any>(
     headers.append('Authorization', `Bearer ${options.token}`);
   }
 
-  if (!(options.body instanceof FormData) && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
+  // Only add Content-Type if body is present and not FormData
+  if (options.body && !(options.body instanceof FormData)) {
     if (!headers.has('Content-Type')) {
       headers.append('Content-Type', 'application/json');
     }
@@ -56,37 +56,51 @@ async function fetchWithAuth<T = any>(
         errorMessageText = errorData?.detail || errorData?.message || errorMessageText;
       }
     } catch (e) {
-      console.warn(`[API_CLIENT - BROWSER] Could not parse error response as JSON for ${path}. Status: ${response.status}. Raw text: ${await response.text().catch(() => '')}`, e);
+      // console.warn(`[API_CLIENT - BROWSER] Could not parse error response as JSON for ${path}. Status: ${response.status}. Raw text: ${await response.text().catch(() => '')}`, e);
     }
     console.error(`[API_CLIENT - BROWSER] API Error ${response.status} for ${path}:`, errorData);
     const error = new Error(errorMessageText) as any;
-    error.response = response; // Attach response for more context if needed
-    error.data = errorData; // Attach parsed error data
+    error.response = response; 
+    error.data = errorData; 
     throw error;
   }
 
   const contentType = response.headers.get("content-type");
+  const responseType = options.responseType || (contentType && contentType.includes("application/json") ? 'json' : 'text');
 
-  if (response.status === 204 || (!contentType && options.responseType !== 'blob')) {
+
+  if (response.status === 204) { // No Content
     return undefined as T; 
   }
-
-  if (options.responseType === 'blob' || (contentType && (contentType.startsWith('video/') || contentType.startsWith('image/') || contentType === 'application/octet-stream'))) {
+  
+  if (responseType === 'blob') {
     return response.blob() as Promise<T>;
   }
   
-  if (contentType && contentType.includes("application/json")) {
-    return response.json() as Promise<T>;
+  if (responseType === 'json') {
+    if (contentType && contentType.includes("application/json")) {
+      return response.json() as Promise<T>;
+    } else {
+      // Handle cases where server sends JSON but incorrect Content-Type
+      const text = await response.text();
+      try {
+        return JSON.parse(text) as T;
+      } catch (e) {
+        console.warn(`[API_CLIENT - BROWSER] Expected JSON but failed to parse text response for ${path}. Text: ${text}`);
+        throw new Error(`Failed to parse JSON response from ${path}`);
+      }
+    }
   }
   
-  console.warn(`[API_CLIENT - BROWSER] Unexpected content type: ${contentType} for path ${path}. Trying to parse as text.`);
+  // Default to text if not blob or json
   return response.text() as Promise<T>;
 }
 
 
-export async function listVideosApi(token: string): Promise<any[]> { // Changed from string[] to any[] as API probably returns objects
+export async function listVideosApi(token: string): Promise<VideoAsset[]> { 
   console.log("[API_CLIENT - BROWSER] listVideosApi called");
-  return fetchWithAuth<any[]>('/videos', { token, method: 'GET' });
+  // Assuming your API returns objects matching VideoAsset structure or adaptable to it
+  return fetchWithAuth<VideoAsset[]>('/videos', { token, method: 'GET', responseType: 'json' });
 }
 
 export async function uploadVideoApi(formData: FormData, token: string): Promise<VideoAsset> {
@@ -95,6 +109,7 @@ export async function uploadVideoApi(formData: FormData, token: string): Promise
     method: 'POST',
     body: formData,
     token,
+    responseType: 'json' // Assuming your /upload returns the new VideoAsset object
   });
 }
 
@@ -108,6 +123,26 @@ export async function getVideoApi(filename: string, token: string): Promise<Blob
   });
 }
 
+export async function deleteVideoApi(filename: string, token: string): Promise<{ message: string }> {
+  const apiPath = `/videos/${encodeURIComponent(filename)}`;
+  console.log(`[API_CLIENT - BROWSER] deleteVideoApi called for filename: ${filename}`);
+  return fetchWithAuth<{ message: string }>(apiPath, {
+    token,
+    method: 'DELETE',
+    responseType: 'json' // Assuming your API returns a JSON message on success
+  });
+}
+
+export async function deleteAllUserVideosApi(token: string): Promise<{ message: string }> {
+  console.log(`[API_CLIENT - BROWSER] deleteAllUserVideosApi called`);
+  return fetchWithAuth<{ message: string }>('/videos', {
+    token,
+    method: 'DELETE',
+    responseType: 'json' // Assuming your API returns a JSON message on success
+  });
+}
+
+
 export async function setPreferenceApi(
   payload: { key: string; value: any },
   token: string
@@ -117,5 +152,6 @@ export async function setPreferenceApi(
     method: 'POST',
     body: JSON.stringify(payload),
     token,
+    responseType: 'text' // Assuming no body or simple text response for preferences
   });
 }
