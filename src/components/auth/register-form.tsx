@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Image from 'next/image';
-import { useRouter } from "next/navigation"; // Import useRouter
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -44,7 +44,7 @@ export type RegisterFormValues = z.infer<typeof registerFormSchema>;
 export function RegisterForm() {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const router = useRouter(); // Initialize useRouter
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<RegisterFormValues>({
@@ -61,57 +61,58 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    console.log("[CLIENT] RegisterForm: Attempting registration. Form values (excluding password for safety in client log):", {
+    const registrationData = {
       username: values.username,
       email: values.email,
       firstName: values.firstName,
       lastName: values.lastName,
-    });
-
-    const backendRegisterUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/auth/register`; // Example backend endpoint
+      password: values.password,
+    };
+    console.log("[CLIENT] RegisterForm: Attempting registration with (raw form values):", values);
+    
+    const backendRegisterUrl = `${process.env.NEXT_PUBLIC_FASTAPI_URL}/auth/register`;
+    console.log(`[CLIENT] RegisterForm: Will attempt to POST to backend URL: ${backendRegisterUrl}`);
+    console.log("[CLIENT] RegisterForm: Registration Data to send to backend:", registrationData);
 
     try {
-      // **IMPORTANT**: This is a call to YOUR backend.
-      // Your backend must take these details and securely create the user in Keycloak using the Admin API.
       const response = await fetch(backendRegisterUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: values.username,
-          email: values.email,
-          firstName: values.firstName,
-          lastName: values.lastName,
-          password: values.password, // Password sent to YOUR secure backend.
-        }),
+        body: JSON.stringify(registrationData),
       });
 
       if (!response.ok) {
-        // Try to parse error from backend if available
         let errorData;
         try {
             errorData = await response.json();
         } catch (parseError) {
-            // If not JSON, use status text
             errorData = { detail: response.statusText || "Registration failed on the server." };
         }
         throw new Error(errorData.detail || `Server responded with ${response.status}`);
       }
 
-      // If backend indicates success (e.g., 200 OK or 201 Created)
       toast({
         title: "Account Creation Submitted!",
-        description: "Your registration has been processed. Please log in with your new credentials.",
+        description: "Your registration request has been sent to the backend. If successful, you will be able to log in shortly. Please try logging in now.",
         variant: "default",
+        duration: 7000,
       });
       form.reset();
-      router.push('/login'); // Redirect to login page
+      router.push('/login'); // Redirect to login page after submission
 
     } catch (error: any) {
       console.error("[CLIENT] RegisterForm: Error during backend registration call:", error);
+      let description = "Could not complete registration. Please check your details or contact support if the issue persists.";
+      if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
+        description = `Failed to connect to the registration server at ${backendRegisterUrl}. This could be due to network issues, CORS problems, or SSL certificate errors if using HTTPS (e.g., ERR_CERT_COMMON_NAME_INVALID). Please check the browser console for more details and ensure the backend server is correctly configured and accessible.`;
+      } else if (error.message) {
+        description = error.message;
+      }
       toast({
         title: "Registration Error",
-        description: error.message || "Could not complete registration. Please check your details or contact support if the issue persists.",
+        description: description,
         variant: "destructive",
+        duration: 10000,
       });
     } finally {
       setIsSubmitting(false);
@@ -229,3 +230,4 @@ export function RegisterForm() {
     </Card>
   );
 }
+ 
