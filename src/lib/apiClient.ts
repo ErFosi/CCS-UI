@@ -1,21 +1,24 @@
 
 // Client-side API client
-
 import type { VideoAsset } from '@/lib/types';
 
+// This function should be defined or imported if it's in a separate utility.
+// For simplicity here, I'll define a basic version.
 const getApiUrl = (): string => {
   const apiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
   if (!apiUrl) {
     console.error("[API_CLIENT - BROWSER] Error: NEXT_PUBLIC_FASTAPI_URL is not defined in environment variables.");
-    return "http://localhost:0/api_url_not_configured"; 
+    // Fallback or throw error, depending on desired behavior
+    return "http://localhost:0/api_url_not_configured";
   }
   console.log(`[API_CLIENT - BROWSER] Using API Base URL: ${apiUrl}`);
   return apiUrl;
 };
 
+
 interface FetchOptions extends RequestInit {
   token?: string;
-  responseType?: 'blob' | 'json';
+  responseType?: 'blob' | 'json'; // Added to specify expected response
 }
 
 async function fetchWithAuth<T = any>(
@@ -30,6 +33,8 @@ async function fetchWithAuth<T = any>(
     headers.append('Authorization', `Bearer ${options.token}`);
   }
 
+  // Don't set Content-Type for FormData, browser does it.
+  // For JSON, ensure it's set.
   if (!(options.body instanceof FormData) && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
     if (!headers.has('Content-Type')) {
       headers.append('Content-Type', 'application/json');
@@ -44,47 +49,54 @@ async function fetchWithAuth<T = any>(
   });
 
   if (!response.ok) {
-    let errorData: any = { detail: `Request failed with status ${response.status} ${response.statusText}` };
-    let errorMessage = `Request failed with status ${response.status} ${response.statusText || 'Unknown error'}`;
+    let errorData: any = {};
+    let errorMessage = `Request failed with status ${response.status} ${response.statusText || '(Unknown Error)'}`;
     try {
-      const responseText = await response.text(); 
+      const responseText = await response.text(); // Read text first
       if (responseText) {
-        errorData = JSON.parse(responseText); 
+        errorData = JSON.parse(responseText); // Try to parse as JSON
         errorMessage = errorData?.detail || errorData?.message || errorMessage;
       }
     } catch (e) {
       console.warn(`[API_CLIENT - BROWSER] Could not parse error response as JSON for ${path}. Status: ${response.status}. Raw text: ${await response.text().catch(() => '')}`, e);
+      // errorMessage remains the status text if JSON parsing fails
     }
     console.error(`[API_CLIENT - BROWSER] API Error ${response.status} for ${path}:`, errorData);
-    throw new Error(errorMessage); // Throw the more specific error message
+    throw new Error(errorMessage);
   }
 
   const contentType = response.headers.get("content-type");
 
-  if (response.status === 204 || !contentType) {
+  // Handle 204 No Content
+  if (response.status === 204 || !contentType && options.responseType !== 'blob') { // If no content type but not expecting blob
     return undefined as T; 
   }
 
+  // If responseType is explicitly 'blob', or content type suggests it's a file
   if (options.responseType === 'blob' || (contentType && (contentType.startsWith('video/') || contentType.startsWith('image/') || contentType === 'application/octet-stream'))) {
     return response.blob() as Promise<T>;
   }
   
+  // Default to JSON if content type indicates it
   if (contentType && contentType.includes("application/json")) {
     return response.json() as Promise<T>;
   }
   
+  // Fallback for other content types, try to parse as text
   console.warn(`[API_CLIENT - BROWSER] Unexpected content type: ${contentType} for path ${path}. Trying to parse as text.`);
   return response.text() as Promise<T>;
 }
 
-// Assuming your API returns a list of VideoAsset compatible objects
-// Adjust the return type if your API returns something different that needs mapping
-export async function listVideosApi(token: string): Promise<VideoAsset[]> {
+
+// API function to list video filenames.
+// Your FastAPI backend returns a list of strings (filenames).
+export async function listVideosApi(token: string): Promise<string[]> {
   console.log("[API_CLIENT - BROWSER] listVideosApi called");
-  return fetchWithAuth<VideoAsset[]>('/videos', { token, method: 'GET' });
+  return fetchWithAuth<string[]>('/videos', { token, method: 'GET' });
 }
 
-// Assuming your API returns a VideoAsset compatible object upon successful upload
+// API function to upload a video. Expects FormData.
+// The backend should return a VideoAsset-like object.
 export async function uploadVideoApi(formData: FormData, token: string): Promise<VideoAsset> {
   console.log("[API_CLIENT - BROWSER] uploadVideoApi called");
   return fetchWithAuth<VideoAsset>('/upload', {
@@ -94,34 +106,18 @@ export async function uploadVideoApi(formData: FormData, token: string): Promise
   });
 }
 
-// Modified to accept type if your API needs it, otherwise filename might be sufficient
-// if your API determines original/censored based on different stored filenames or query params.
-// This example assumes filename is enough, and the type is for client-side naming or if API uses it.
-export async function getVideoApi(filename: string, token: string, type?: 'original' | 'censored'): Promise<Blob> {
-  // If your API has different paths for original/censored, adjust 'path' here based on 'type'
-  // For example: const path = type === 'censored' ? `/videos/censored/${filename}` : `/videos/original/${filename}`;
-  // Or if it's a query parameter: const path = `/videos/${filename}?version=${type}`;
-  // For now, assuming the base /videos/{filename} endpoint might serve the primary (original) version.
-  // If type is needed by API, it needs to be incorporated into path or query.
-  let apiPath = `/videos/${encodeURIComponent(filename)}`;
-  if (type === 'censored') {
-    // Example: if your API has a specific path segment for censored versions
-    // apiPath = `/videos/censored/${encodeURIComponent(filename)}`; 
-    // Or query param: apiPath = `/videos/${encodeURIComponent(filename)}?version=censored`;
-    // This needs to match your FastAPI backend's routing for fetching specific versions.
-    // For now, we assume getVideoApi is for the file named 'filename' and differentiation is elsewhere
-    // or that filename itself implies original/censored.
-    // Let's assume the download logic in VideoContext/VideoCard will handle this.
-    // The API call itself will just use the filename it's given.
-  }
-  console.log(`[API_CLIENT - BROWSER] getVideoApi called for filename: ${filename}, type: ${type}`);
+// API function to get a specific video file as a Blob.
+export async function getVideoApi(filename: string, token: string): Promise<Blob> {
+  const apiPath = `/videos/${encodeURIComponent(filename)}`;
+  console.log(`[API_CLIENT - BROWSER] getVideoApi called for filename: ${filename}`);
   return fetchWithAuth<Blob>(apiPath, {
     token,
     method: 'GET',
-    responseType: 'blob',
+    responseType: 'blob', // Crucial: expect a Blob
   });
 }
 
+// API function to set a preference.
 export async function setPreferenceApi(
   payload: { key: string; value: any },
   token: string
