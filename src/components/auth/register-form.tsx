@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import Image from 'next/image';
-// Removed useRouter as we will use Keycloak's redirect
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -19,11 +18,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/context/theme-context";
-import { useAuth } from "@/context/auth-context"; // Import useAuth
-import { useState } from "react";
+import { useAuth } from "@/context/auth-context";
+import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
-// Schema can remain for client-side validation if desired, though Keycloak will handle final validation.
 const registerFormSchema = z.object({
   username: z.string().min(3, { message: "Username must be at least 3 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
@@ -62,7 +60,7 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    console.log("[CLIENT] RegisterForm: Attempting to redirect to Keycloak registration page.");
+    console.log("[CLIENT] RegisterForm: User submitted registration form with values:", values);
 
     if (!keycloak) {
       toast({
@@ -77,31 +75,31 @@ export function RegisterForm() {
     try {
       // This will redirect the user to Keycloak's registration page.
       // Keycloak's page will handle the actual data input and user creation.
-      // We can pass the email as a hint if desired, but Keycloak might ignore it
-      // or use it to prefill its own form.
-      await register({
-        // You can pass redirectUri or other options here if needed,
-        // e.g., redirectUri: `${window.location.origin}/login`
-        // For now, using default behavior.
+      // The data collected in *this* form (values) is not directly passed to Keycloak's
+      // user creation API by keycloak.register() in a way that bypasses Keycloak's UI.
+      // Keycloak's own registration UI will ask for the necessary details.
+      console.log("[CLIENT] RegisterForm: Redirecting to Keycloak's registration page.");
+      toast({
+        title: "Redirecting for Registration",
+        description: "You are being redirected to the secure registration page to complete your account creation.",
+        duration: 5000,
       });
+      // We can pass a redirectUri if we want the user to come back to a specific page
+      // after successful registration on Keycloak's side. Often, Keycloak will redirect
+      // to the login page or the application's main page by default.
+      await register({ redirectUri: `${window.location.origin}/login` });
       // The user will be redirected, so code below this might not execute
       // if the redirect is immediate.
-      toast({
-        title: "Redirecting to Registration",
-        description: "You are being redirected to the secure registration page.",
-      });
     } catch (error: any) {
       console.error("[CLIENT] RegisterForm: Error redirecting to Keycloak registration:", error);
       toast({
-        title: "Registration Error",
+        title: "Registration Initiation Failed",
         description: error.message || "Could not redirect to registration page. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      // setIsSubmitting might not be reached if redirect happens fast.
-      // No need to reset form as user is redirected.
-      setIsSubmitting(false);
+      setIsSubmitting(false); // Only reset if redirect fails
     }
+    // No need to setIsSubmitting(false) here if redirect is successful, as page navigates away.
   }
 
   const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
@@ -207,7 +205,7 @@ export function RegisterForm() {
             />
             <Button type="submit" className="w-full !bg-primary hover:!bg-primary/90 text-primary-foreground" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Create Account
+              Create Account & Proceed to Keycloak
             </Button>
           </form>
         </Form>
