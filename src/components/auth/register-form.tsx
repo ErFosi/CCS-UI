@@ -18,8 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/context/theme-context";
-import { useAuth } from "@/context/auth-context";
-import { useState, useEffect } from "react";
+// Removed useAuth as we are not calling keycloak.register() or a backend API from this version
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 const registerFormSchema = z.object({
@@ -43,7 +43,6 @@ export type RegisterFormValues = z.infer<typeof registerFormSchema>;
 export function RegisterForm() {
   const { toast } = useToast();
   const { theme } = useTheme();
-  const { register, keycloak } = useAuth(); // Use register from AuthContext
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<RegisterFormValues>({
@@ -60,46 +59,29 @@ export function RegisterForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setIsSubmitting(true);
-    console.log("[CLIENT] RegisterForm: User submitted registration form with values:", values);
+    console.log("[CLIENT] RegisterForm: User submitted registration data (for backend processing):", {
+      username: values.username,
+      email: values.email,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      // Password should NOT be logged extensively, even on client, in a real scenario
+    });
 
-    if (!keycloak) {
-      toast({
-        title: "Initialization Error",
-        description: "Authentication service is not available. Please try again later.",
-        variant: "destructive",
-      });
-      setIsSubmitting(false);
-      return;
-    }
+    // Simulate a delay as if calling a backend
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    try {
-      // This will redirect the user to Keycloak's registration page.
-      // Keycloak's page will handle the actual data input and user creation.
-      // The data collected in *this* form (values) is not directly passed to Keycloak's
-      // user creation API by keycloak.register() in a way that bypasses Keycloak's UI.
-      // Keycloak's own registration UI will ask for the necessary details.
-      console.log("[CLIENT] RegisterForm: Redirecting to Keycloak's registration page.");
-      toast({
-        title: "Redirecting for Registration",
-        description: "You are being redirected to the secure registration page to complete your account creation.",
-        duration: 5000,
-      });
-      // We can pass a redirectUri if we want the user to come back to a specific page
-      // after successful registration on Keycloak's side. Often, Keycloak will redirect
-      // to the login page or the application's main page by default.
-      await register({ redirectUri: `${window.location.origin}/login` });
-      // The user will be redirected, so code below this might not execute
-      // if the redirect is immediate.
-    } catch (error: any) {
-      console.error("[CLIENT] RegisterForm: Error redirecting to Keycloak registration:", error);
-      toast({
-        title: "Registration Initiation Failed",
-        description: error.message || "Could not redirect to registration page. Please try again.",
-        variant: "destructive",
-      });
-      setIsSubmitting(false); // Only reset if redirect fails
-    }
-    // No need to setIsSubmitting(false) here if redirect is successful, as page navigates away.
+    toast({
+      title: "Registration Data Collected",
+      description: "Your details have been collected. For actual account creation, this data would be sent to a secure backend service. This backend would then use Keycloak's Admin API to create your user. Please consult with your backend developer to implement this step.",
+      variant: "default",
+      duration: 10000, // Longer duration for this informational toast
+    });
+    
+    // In a real scenario with backend integration, you might reset the form or navigate upon success.
+    // For now, we just stop the submission process here.
+    // form.reset(); // Optionally reset the form
+
+    setIsSubmitting(false);
   }
 
   const logoSrc = theme === 'dark' ? '/logo/logo_oscuro.png' : '/logo/logo.png';
@@ -114,9 +96,9 @@ export function RegisterForm() {
             width={160}
             height={90}
             className="rounded-sm"
-            data-ai-hint="company logo"
             priority
             key={theme}
+            data-ai-hint="company logo"
           />
         </div>
       </CardHeader>
@@ -205,7 +187,7 @@ export function RegisterForm() {
             />
             <Button type="submit" className="w-full !bg-primary hover:!bg-primary/90 text-primary-foreground" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Create Account & Proceed to Keycloak
+              Create Account
             </Button>
           </form>
         </Form>
