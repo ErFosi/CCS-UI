@@ -1,13 +1,11 @@
 
 export interface VideoAsset {
-  id: string; // Should be unique, e.g., S3 key or backend-generated ID
-  name: string; // User-provided or derived filename for display
-  filename: string; // Actual filename used for API calls (e.g., "video.mp4" part of S3 key)
-  
-  originalUrl?: string; // Full URL constructed by frontend for streaming/download
-  censoredUrl?: string; // Full URL for censored version, updated after processing
+  id: string;
+  name: string;
+  filename: string; // Actual filename for API calls (original)
+  originalUrl?: string; // Full URL for original video streaming/download
+  censoredUrl?: string; // Full URL for censored video, updated after processing
   processedFilename?: string; // Filename of the processed/censored video
-
   uploadDate?: string; // ISO string
   status: 'uploading' | 'uploaded' | 'censoring' | 'censored' | 'failed';
   error?: string;
@@ -18,6 +16,14 @@ export interface VideoAsset {
 export interface ProcessVideoApiResponse {
   message: string;
   processed_filename: string;
-  s3_key: string; // Assuming this is the full S3 key of the processed video
-  status: 'processed' | string; // Or a more specific status
+  s3_key: string;
+  status: 'processed' | string;
+}
+
+// Defines the structure of user preferences fetched from the API
+export interface UserPreference {
+  theme?: 'light' | 'dark';
+  // Add other preference fields here if your API returns them
+  // e.g., videoQuality?: 'auto' | '720p' | '1080p';
+  // e.g., notificationsEnabled?: boolean;
 }
