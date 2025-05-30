@@ -23,20 +23,21 @@ export function VideoPlayer({ src, width, height, className, onLoadedMetadata }:
   }, [src]);
   
   return (
-    <div className={`relative aspect-video w-full max-w-full overflow-hidden rounded-lg bg-black shadow-md ${className}`}>
+    // Removed aspect-video, height will be controlled by parent or its own content
+    <div className={`relative w-full h-full max-w-full overflow-hidden rounded-lg bg-black shadow-md ${className}`}>
       <video
         ref={videoRef}
         src={src} // Use src attribute directly
         controls
-        width={width} // Note: for responsive videos, direct width/height might be overridden by CSS.
-        height={height} // Consider using CSS for sizing if these are not fixed.
+        width={width} 
+        height={height}
         onLoadedMetadata={onLoadedMetadata}
-        className="h-full w-full object-contain" // Ensure video scales within its container
-        preload="metadata" // Good practice: loads enough to get metadata like duration/dimensions
+        className="h-full w-full object-contain" // object-contain is important to maintain video's aspect ratio within this box
+        preload="metadata" 
       >
-        {/* Fallback content if the browser doesn't support the video tag or the format */}
         Your browser does not support the video tag or the provided video format.
       </video>
     </div>
   );
 }
+
