@@ -15,15 +15,15 @@ export interface VideoAsset {
 
 export interface ProcessVideoApiResponse {
   message: string;
-  processed_filename: string;
-  s3_key: string;
-  status: 'processed' | string;
+  processed_filename: string; // Ensure this matches your API response key
+  s3_key: string; // Ensure this matches
+  status: 'processed' | string; // Ensure this matches
 }
 
-// Defines the structure of user preferences fetched from the API
+// Defines the structure of user preferences fetched from AND sent to the API
 export interface UserPreference {
   theme?: 'light' | 'dark';
-  // Add other preference fields here if your API returns them
+  // Add other preference fields here if your API handles them
   // e.g., videoQuality?: 'auto' | '720p' | '1080p';
   // e.g., notificationsEnabled?: boolean;
 }

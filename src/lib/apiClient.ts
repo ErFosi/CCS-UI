@@ -7,8 +7,9 @@ export const getApiBaseUrl = (): string => {
   const apiUrl = process.env.NEXT_PUBLIC_FASTAPI_URL;
   if (!apiUrl) {
     // Fallback for safety, but this should be configured
-    console.error("[API_CLIENT - BROWSER] Error: NEXT_PUBLIC_FASTAPI_URL is not defined in environment variables.");
-    return "http://localhost:0/api_url_not_configured";
+    const defaultUrl = "http://localhost:8000/api_url_not_configured_in_env";
+    console.error(`[API_CLIENT - BROWSER] Error: NEXT_PUBLIC_FASTAPI_URL is not defined. Using default: ${defaultUrl}`);
+    return defaultUrl;
   }
   // console.log(`[API_CLIENT - BROWSER] Using API Base URL: ${apiUrl}`);
   return apiUrl;
@@ -50,7 +51,6 @@ async function fetchWithAuth<T = any>(
     let errorData: any = {};
     let errorMessageText = `Request failed with status ${response.status} ${response.statusText || '(Unknown Error)'}`;
     try {
-      // Try to parse error response as JSON
       const responseText = await response.text(); 
       if (responseText) {
         errorData = JSON.parse(responseText); 
@@ -68,11 +68,10 @@ async function fetchWithAuth<T = any>(
   }
 
   const contentType = response.headers.get("content-type");
-  // Default to 'json' if content type suggests it, otherwise 'text', allow override by options.responseType
   const responseType = options.responseType || (contentType && contentType.includes("application/json") ? 'json' : 'text');
 
-  if (response.status === 204) { // No Content
-    return undefined as T; // Or handle as appropriate, e.g., return null or an empty object
+  if (response.status === 204) { 
+    return undefined as T; 
   }
   
   if (responseType === 'blob') {
@@ -80,32 +79,25 @@ async function fetchWithAuth<T = any>(
   }
   
   if (responseType === 'json') {
-    // Ensure we actually attempt to parse as JSON
-    // Some APIs might send JSON with a non-standard content-type, or no content-type
-    // If content type is explicitly application/json, great. Otherwise, we still try.
     return response.json() as Promise<T>;
   }
   
-  // Default to text if not blob or json
   return response.text() as Promise<T>;
 }
-
 
 // Expects API to return a list of objects matching VideoAsset structure or similar
 export async function listVideosApi(token: string): Promise<any[]> { 
   console.log("[API_CLIENT - BROWSER] listVideosApi called");
-  // Assuming API returns objects that will be mapped to VideoAsset in context
   return fetchWithAuth<any[]>('/videos', { token, method: 'GET', responseType: 'json' });
 }
 
-// Expects API to return an object matching VideoAsset for the uploaded video
 export async function uploadVideoApi(formData: FormData, token: string): Promise<VideoAsset> {
   console.log("[API_CLIENT - BROWSER] uploadVideoApi called");
   return fetchWithAuth<VideoAsset>('/upload', {
     method: 'POST',
     body: formData,
     token,
-    responseType: 'json' // Expecting JSON response describing the uploaded video
+    responseType: 'json' 
   });
 }
 
@@ -123,7 +115,7 @@ export async function processVideoApi(filename: string, token: string): Promise<
   console.log(`[API_CLIENT - BROWSER] processVideoApi called for filename: ${filename}`);
   return fetchWithAuth<ProcessVideoApiResponse>('/process', {
     method: 'POST',
-    body: JSON.stringify({ filename }), // FastAPI expects a JSON body with a 'filename' key
+    body: JSON.stringify({ filename }), 
     token,
     responseType: 'json',
   });
@@ -135,13 +127,13 @@ export async function deleteVideoApi(filename: string, token: string): Promise<{
   return fetchWithAuth<{ message: string }>(apiPath, {
     token,
     method: 'DELETE',
-    responseType: 'json' // Assuming a JSON response like {"message": "..."}
+    responseType: 'json' 
   });
 }
 
 export async function deleteAllUserVideosApi(token: string): Promise<{ message: string }> {
   console.log(`[API_CLIENT - BROWSER] deleteAllUserVideosApi called`);
-  return fetchWithAuth<{ message: string }>('/videos', { // Assuming DELETE /videos for all user videos
+  return fetchWithAuth<{ message: string }>('/videos', { 
     token,
     method: 'DELETE',
     responseType: 'json'
@@ -157,20 +149,15 @@ export async function getPreferenceApi(token: string): Promise<UserPreference> {
   });
 }
 
-
 export async function setPreferenceApi(
-  payload: UserPreference, // Use UserPreference type for payload
+  payload: UserPreference,
   token: string
 ): Promise<void> { 
   console.log("[API_CLIENT - BROWSER] setPreferenceApi called with payload:", payload);
-  // Expecting a 200 OK with no content, or a JSON response confirming success.
-  // If it's 204 No Content, responseType 'text' or 'json' will try to parse and might fail.
-  // If no body is expected, 'text' is safer or handle 204 specifically.
-  // For now, let's assume a JSON response might come back or just a 200 OK.
   await fetchWithAuth<any>('/preferences', { 
     method: 'POST',
     body: JSON.stringify(payload),
     token,
-    responseType: 'json' // Or 'text' if no meaningful JSON body is returned
+    responseType: 'json' // Assuming a 200 OK or 204 No Content
   });
 }
