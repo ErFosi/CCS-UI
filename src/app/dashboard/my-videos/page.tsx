@@ -50,8 +50,8 @@ export default function MyVideosPage() {
   return (
     <>
       <UpgradePopup isOpen={showUpgradePopup} onClose={handleClosePopup} />
-      {/* The container mx-auto will center content. DashboardLayout provides padding. */}
-      <div className="container mx-auto">
+      {/* Removed container mx-auto, relies on DashboardLayout padding */}
+      <div className="w-full">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold tracking-tight">My Videos</h1>
           <Button asChild className="!bg-primary hover:!bg-primary/90 text-primary-foreground">
@@ -80,7 +80,7 @@ export default function MyVideosPage() {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {videos.map((video) => (
               <VideoCard key={video.id} video={video} />
             ))}
@@ -90,3 +90,4 @@ export default function MyVideosPage() {
     </>
   );
 }
+
