@@ -33,10 +33,10 @@ export function VideoRegionSelector({
   const [selection, setSelection] = useState<SelectionCoordinates | null>(null);
   
   const [displayedVideoMetrics, setDisplayedVideoMetrics] = useState<{
-    width: number;  // width of video content as displayed
-    height: number; // height of video content as displayed
-    offsetX: number; // X offset of video content within the fixed-aspect container
-    offsetY: number; // Y offset of video content within the fixed-aspect container
+    width: number;
+    height: number;
+    offsetX: number;
+    offsetY: number;
   } | null>(null);
 
   const fixedAspectContainerRef = useRef<HTMLDivElement>(null);
@@ -54,30 +54,21 @@ export function VideoRegionSelector({
   }, [isOpen, originalVideoWidth, originalVideoHeight]);
 
   const handleVideoLoad = useCallback((event: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    if (!fixedAspectContainerRef.current || !originalVideoWidth || !originalVideoHeight) {
-      console.warn('[VideoRegionSelector] handleVideoLoad: Guard failed. Ref or original dimensions props missing.', {
-          hasRef: !!fixedAspectContainerRef.current,
-          originalVideoWidth,
-          originalVideoHeight
-      });
-      setDisplayedVideoMetrics(null);
-      return;
-    }
-
-    // Use PROPS for native dimensions as videoElement.videoWidth/Height from event can be unreliable for this calculation.
-    const videoNativeWidth = originalVideoWidth; 
-    const videoNativeHeight = originalVideoHeight;
-
-    if (videoNativeWidth === 0 || videoNativeHeight === 0) {
-      console.warn('[VideoRegionSelector] Original dimensions from props are 0x0. Cannot calculate display metrics.');
+    if (!fixedAspectContainerRef.current) {
+      console.warn('[VideoRegionSelector] handleVideoLoad: fixedAspectContainerRef missing.');
       setDisplayedVideoMetrics(null);
       return;
     }
     
-    const videoElement = event.currentTarget; // Still useful for knowing the event fired.
-    console.log(`[VideoRegionSelector] handleVideoLoad: event.currentTarget.videoWidth=${videoElement.videoWidth}, event.currentTarget.videoHeight=${videoElement.videoHeight}. Using props for calculation: ${videoNativeWidth}x${videoNativeHeight}`);
+    const videoNativeWidth = Number(originalVideoWidth) || 0;
+    const videoNativeHeight = Number(originalVideoHeight) || 0;
 
-
+    if (videoNativeWidth === 0 || videoNativeHeight === 0) {
+      console.warn('[VideoRegionSelector] Original dimensions from props are 0x0 or not provided. Cannot calculate display metrics.');
+      setDisplayedVideoMetrics(null);
+      return;
+    }
+    
     const containerRect = fixedAspectContainerRef.current.getBoundingClientRect();
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
@@ -93,19 +84,23 @@ export function VideoRegionSelector({
 
     let newDisplayedWidth, newDisplayedHeight, newOffsetX, newOffsetY;
 
-    if (videoActualAspectRatio > containerAspectRatio) {
+    if (videoActualAspectRatio > containerAspectRatio) { // Video wider than container (letterboxed)
       newDisplayedWidth = containerWidth;
       newDisplayedHeight = containerWidth / videoActualAspectRatio;
       newOffsetX = 0;
       newOffsetY = (containerHeight - newDisplayedHeight) / 2;
-    } else {
+    } else { // Video taller or same AR as container (pillarboxed)
       newDisplayedHeight = containerHeight;
       newDisplayedWidth = containerHeight * videoActualAspectRatio;
       newOffsetY = 0;
       newOffsetX = (containerWidth - newDisplayedWidth) / 2;
     }
     
-    console.log('[VideoRegionSelector] Video Loaded. Native Dims (from props):', {videoNativeWidth, videoNativeHeight}, 'Container Dims (16:9 box):', {containerWidth, containerHeight}, 'VideoAR:', videoActualAspectRatio, 'ContainerAR:', containerAspectRatio, 'Calculated Display Metrics:', {newDisplayedWidth, newDisplayedHeight, newOffsetX, newOffsetY});
+    console.log('[VideoRegionSelector] handleVideoLoad: Calculated Display Metrics:', {
+        containerWidth, containerHeight, videoNativeWidth, videoNativeHeight,
+        videoActualAspectRatio, containerAspectRatio,
+        newDisplayedWidth, newDisplayedHeight, newOffsetX, newOffsetY
+    });
 
     setDisplayedVideoMetrics({
       width: newDisplayedWidth,
@@ -113,35 +108,17 @@ export function VideoRegionSelector({
       offsetX: newOffsetX,
       offsetY: newOffsetY,
     });
-  }, [originalVideoWidth, originalVideoHeight]); // Depend on originalVideoWidth/Height from props
+  }, [originalVideoWidth, originalVideoHeight]);
 
-
-  const getRelativeCoords = (clientX: number, clientY: number) => {
-    if (!overlayRef.current) return { x: 0, y: 0, valid: false };
-    const rect = overlayRef.current.getBoundingClientRect();
-    
-    if (rect.width === 0 || rect.height === 0) {
-        console.warn('[VideoRegionSelector] Overlay (active video area) dimensions are zero during getRelativeCoords.');
-        return { x: 0, y: 0, valid: false };
-    }
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-      valid: true
-    };
-  };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!displayedVideoMetrics) {
-        console.warn("[VideoRegionSelector] MouseDown: displayedVideoMetrics not ready. Cannot start drawing.");
+    if (!displayedVideoMetrics || !overlayRef.current) {
+        console.warn("[VideoRegionSelector] MouseDown: displayedVideoMetrics or overlayRef not ready. Cannot start drawing.");
         return;
     }
-    const { x, y, valid } = getRelativeCoords(event.clientX, event.clientY);
-    if (!valid) {
-      console.warn("[VideoRegionSelector] MouseDown: Invalid relative coords.");
-      return;
-    }
-    console.log('[VideoRegionSelector] MouseDown on active overlay at (coords relative to overlay):', { x, y });
+    const x = event.nativeEvent.offsetX;
+    const y = event.nativeEvent.offsetY;
+    console.log('[VideoRegionSelector] MouseDown on active overlay at (nativeEvent.offsetX/Y):', { x, y });
     setIsDrawing(true);
     setStartPoint({ x, y });
     setEndPoint({ x, y }); 
@@ -150,9 +127,12 @@ export function VideoRegionSelector({
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isDrawing || !startPoint || !overlayRef.current || !displayedVideoMetrics) return;
-    const { x, y, valid } = getRelativeCoords(event.clientX, event.clientY);
-    if (!valid) return;
-    setEndPoint({ x, y });
+    const x = event.nativeEvent.offsetX;
+    const y = event.nativeEvent.offsetY;
+    // Clamp coordinates to be within the overlay bounds
+    const clampedX = Math.max(0, Math.min(x, displayedVideoMetrics.width));
+    const clampedY = Math.max(0, Math.min(y, displayedVideoMetrics.height));
+    setEndPoint({ x: clampedX, y: clampedY });
   };
   
   const handleMouseUp = () => {
@@ -163,7 +143,10 @@ export function VideoRegionSelector({
       return;
     }
 
-    if (!originalVideoWidth || !originalVideoHeight || originalVideoWidth <= 0 || originalVideoHeight <= 0) {
+    const videoNativeWidth = Number(originalVideoWidth) || 0;
+    const videoNativeHeight = Number(originalVideoHeight) || 0;
+
+    if (videoNativeWidth <= 0 || videoNativeHeight <= 0) {
         console.error('[VideoRegionSelector] MouseUp: Aborting, original video dimensions (from props) are invalid or missing.', { originalVideoWidth, originalVideoHeight });
         setIsDrawing(false);
         setSelection(null); setStartPoint(null); setEndPoint(null);
@@ -178,16 +161,11 @@ export function VideoRegionSelector({
         setSelection(null); setStartPoint(null); setEndPoint(null);
         return;
     }
-
-    const boundedStartX = Math.max(0, Math.min(startPoint.x, displayedContentWidth));
-    const boundedStartY = Math.max(0, Math.min(startPoint.y, displayedContentHeight));
-    const boundedEndX = Math.max(0, Math.min(endPoint.x, displayedContentWidth));
-    const boundedEndY = Math.max(0, Math.min(endPoint.y, displayedContentHeight));
     
-    const x1_on_overlay = Math.min(boundedStartX, boundedEndX);
-    const y1_on_overlay = Math.min(boundedStartY, boundedEndY);
-    const x2_on_overlay = Math.max(boundedStartX, boundedEndX);
-    const y2_on_overlay = Math.max(boundedStartY, boundedEndY);
+    const x1_on_overlay = Math.min(startPoint.x, endPoint.x);
+    const y1_on_overlay = Math.min(startPoint.y, endPoint.y);
+    const x2_on_overlay = Math.max(startPoint.x, endPoint.x);
+    const y2_on_overlay = Math.max(startPoint.y, endPoint.y);
 
     if (x1_on_overlay >= x2_on_overlay || y1_on_overlay >= y2_on_overlay) {
         console.warn("[VideoRegionSelector] MouseUp: Selection on active overlay resulted in zero or negative width/height. Resetting selection.");
@@ -196,8 +174,8 @@ export function VideoRegionSelector({
         return;
     }
 
-    const scaleX = originalVideoWidth / displayedContentWidth;
-    const scaleY = originalVideoHeight / displayedContentHeight;
+    const scaleX = videoNativeWidth / displayedContentWidth;
+    const scaleY = videoNativeHeight / displayedContentHeight;
     console.log('[VideoRegionSelector] MouseUp: Scaling factors (originalVideoDim / displayedContentDim):', { scaleX, scaleY });
 
     const finalCoords: SelectionCoordinates = {
@@ -238,11 +216,21 @@ export function VideoRegionSelector({
   };
 
   const currentSelectionStyle: React.CSSProperties = {};
-  if (startPoint && endPoint && displayedVideoMetrics && Math.abs(endPoint.x - startPoint.x) > 0 && Math.abs(endPoint.y - startPoint.y) > 0) {
+  if (isDrawing && startPoint && endPoint && displayedVideoMetrics && Math.abs(endPoint.x - startPoint.x) > 0 && Math.abs(endPoint.y - startPoint.y) > 0) {
     currentSelectionStyle.left = `${Math.min(startPoint.x, endPoint.x)}px`;
     currentSelectionStyle.top = `${Math.min(startPoint.y, endPoint.y)}px`;
     currentSelectionStyle.width = `${Math.abs(endPoint.x - startPoint.x)}px`;
     currentSelectionStyle.height = `${Math.abs(endPoint.y - startPoint.y)}px`;
+  } else if (!isDrawing && selection && displayedVideoMetrics && selection.x2 > selection.x1 && selection.y2 > selection.y1) {
+    // Display the committed selection (scaled back to overlay dimensions for display)
+    if (displayedVideoMetrics.width > 0 && displayedVideoMetrics.height > 0 && originalVideoWidth && originalVideoHeight) {
+        const displayScaleX = displayedVideoMetrics.width / originalVideoWidth;
+        const displayScaleY = displayedVideoMetrics.height / originalVideoHeight;
+        currentSelectionStyle.left = `${selection.x1 * displayScaleX}px`;
+        currentSelectionStyle.top = `${selection.y1 * displayScaleY}px`;
+        currentSelectionStyle.width = `${(selection.x2 - selection.x1) * displayScaleX}px`;
+        currentSelectionStyle.height = `${(selection.y2 - selection.y1) * displayScaleY}px`;
+    }
   }
   
   const isConfirmDisabled = !selection || (selection.x1 >= selection.x2 || selection.y1 >= selection.y2);
@@ -259,7 +247,6 @@ export function VideoRegionSelector({
           </DialogTitle>
           <DialogDescription>
             Click and drag on the video to select the area you want to process.
-            The coordinates will be scaled to the original video dimensions.
             Original Dimensions: {originalVideoWidth && originalVideoHeight ? `${originalVideoWidth}x${originalVideoHeight}px` : 'Not available'}
           </DialogDescription>
         </DialogHeader>
@@ -268,11 +255,11 @@ export function VideoRegionSelector({
           <div 
             ref={fixedAspectContainerRef}
             className="relative w-full max-w-[70vw] sm:max-w-[60vw] md:max-w-xl lg:max-w-2xl aspect-video bg-black overflow-hidden"
-            // style={{ outline: '2px solid red' }} // Debug outline for 16:9 container
           >
             {videoSrc && originalVideoWidth && originalVideoHeight ? (
               <>
                 <VideoPlayer 
+                  key={videoSrc} // Re-mount if src changes
                   src={videoSrc} 
                   className="absolute top-0 left-0 w-full h-full" 
                   onLoadedMetadata={handleVideoLoad} 
@@ -286,14 +273,13 @@ export function VideoRegionSelector({
                       height: `${displayedVideoMetrics.height}px`,
                       top: `${displayedVideoMetrics.offsetY}px`,
                       left: `${displayedVideoMetrics.offsetX}px`,
-                      // outline: '2px dashed limegreen', // Debug outline for active video area overlay
                     }}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={() => { if(isDrawing) handleMouseUp(); }} 
                   >
-                    {startPoint && endPoint && Object.keys(currentSelectionStyle).length > 0 && (
+                    {Object.keys(currentSelectionStyle).length > 0 && (
                       <div
                         className="absolute border-2 border-dashed border-yellow-400 bg-yellow-400 bg-opacity-20 pointer-events-none"
                         style={currentSelectionStyle}
