@@ -39,7 +39,8 @@ export default function MyVideosPage() {
 
   if (authLoading || videosLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-150px)] text-center">
+      // This div will now grow to fill the space provided by DashboardLayout's <main>
+      <div className="flex flex-col flex-grow items-center justify-center text-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
         <p className="text-muted-foreground">{authLoading ? "Authenticating..." : "Loading videos..."}</p>
       </div>
@@ -49,7 +50,8 @@ export default function MyVideosPage() {
   return (
     <>
       <UpgradePopup isOpen={showUpgradePopup} onClose={handleClosePopup} />
-      <div className="container mx-auto py-2">
+      {/* The container mx-auto will center content. DashboardLayout provides padding. */}
+      <div className="container mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold tracking-tight">My Videos</h1>
           <Button asChild className="!bg-primary hover:!bg-primary/90 text-primary-foreground">
@@ -59,14 +61,13 @@ export default function MyVideosPage() {
           </Button>
         </div>
 
-        {videosError && (
+        {videosError ? (
           <div className="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-200 dark:text-red-800" role="alert">
             <span className="font-medium">Error:</span> {videosError}
           </div>
-        )}
-
-        {!videosError && videos.length === 0 && !videosLoading && (
-          <div className="flex flex-col items-center justify-center text-center py-16 px-4 border-2 border-dashed border-border rounded-lg bg-card">
+        ) : videos.length === 0 ? (
+          // This "No Videos" state will also grow vertically
+          <div className="flex flex-col flex-grow items-center justify-center text-center py-16 px-4 border-2 border-dashed border-border rounded-lg bg-card">
             <VideoOff className="h-20 w-20 text-muted-foreground mb-6" />
             <h2 className="text-2xl font-semibold mb-2 text-foreground">No Videos Yet</h2>
             <p className="text-muted-foreground mb-6 max-w-md">
@@ -78,9 +79,7 @@ export default function MyVideosPage() {
               </Link>
             </Button>
           </div>
-        )}
-
-        {!videosError && videos.length > 0 && (
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6 xl:grid-cols-2">
             {videos.map((video) => (
               <VideoCard key={video.id} video={video} />
