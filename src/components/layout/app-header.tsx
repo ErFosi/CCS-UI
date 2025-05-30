@@ -4,30 +4,53 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, UserCircle, Moon, Sun, CreditCard, Trash2, Loader2 } from "lucide-react"; // Added Trash2
+import { LogOut, UserCircle, Moon, Sun, CreditCard, Trash2, Loader2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "@/context/theme-context"; 
 import { useAuth } from "@/context/auth-context";
-import { useVideoContext } from "@/context/video-context"; // For deleting videos
-import { AccountDeletionDialog } from "@/components/auth/account-deletion-dialog"; // Import new dialog
+import { AccountDeletionDialog } from "@/components/auth/account-deletion-dialog";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { deleteAllUserVideosApi } from "@/lib/apiClient";
-
+import { deleteAllUserVideosApi, setPreferenceApi } from "@/lib/apiClient"; // Import setPreferenceApi
 
 export function AppHeader() {
   const pathname = usePathname();
-  const { theme, toggleTheme } = useTheme(); 
-  const { logout, user, getToken, isLoading: authIsLoading } = useAuth();
+  const { theme, toggleTheme: toggleThemeContext } = useTheme(); 
+  const { logout, user, getToken, isLoading: authIsLoading, isAuthenticated } = useAuth(); // Added isAuthenticated
   const { toast } = useToast();
   
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
+  const handleToggleTheme = async () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    toggleThemeContext(); // This updates local state and localStorage
+
+    if (isAuthenticated) {
+      try {
+        const token = await getToken();
+        if (token) {
+          console.log(`[AppHeader] Attempting to save theme preference: ${newTheme} to backend.`);
+          await setPreferenceApi({ theme: newTheme }, token);
+          // Optional: toast success for saving preference, though might be too noisy
+          // toast({ title: "Theme Saved", description: `Theme preference '${newTheme}' saved to server.` });
+        } else {
+          console.warn("[AppHeader] Could not get token to save theme preference.");
+        }
+      } catch (error) {
+        console.error("[AppHeader] Failed to save theme preference to backend:", error);
+        toast({
+          title: "Theme Preference Error",
+          description: "Could not save theme preference to the server.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
 
   const handleLogout = async () => {
-    await logout(); // AuthContext logout will handle redirect
+    await logout(); 
   };
 
   const getPageTitle = () => {
@@ -50,20 +73,17 @@ export function AppHeader() {
     }
 
     try {
-      // Step 1: Delete all user videos from S3 via your API
       await deleteAllUserVideosApi(token);
       toast({ title: "Videos Deleted", description: "All your videos have been successfully deleted.", variant: "default" });
-
-      // Step 2: Inform user and log out. Actual Keycloak user deletion is a backend task.
+      
       toast({
         title: "Account Deletion Requested",
         description: "Account deletion initiated on the server. You will now be logged out.",
         duration: 7000,
       });
       
-      // Parent component (AppHeader) closes the dialog after successful operations and logout
       setIsDeleteDialogOpen(false); 
-      await logout(); // This will redirect to login page
+      await logout(); 
       
     } catch (error) {
       console.error("Error during account deletion process:", error);
@@ -72,12 +92,10 @@ export function AppHeader() {
         description: error instanceof Error ? error.message : "Could not complete account deletion process.",
         variant: "destructive",
       });
-      setIsDeletingAccount(false); 
-      // Keep dialog open on error for user to see or retry (though retry isn't built here)
+    } finally {
+        setIsDeletingAccount(false); 
     }
-    // setIsDeletingAccount(false); // This might be set too early if logout is async and parent closes dialog
   };
-
 
   return (
     <>
@@ -109,7 +127,7 @@ export function AppHeader() {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
+              <DropdownMenuItem onClick={handleToggleTheme} className="cursor-pointer">
                 {theme === "light" ? (
                   <Moon className="mr-2 h-4 w-4" />
                 ) : (
@@ -127,7 +145,7 @@ export function AppHeader() {
               <DropdownMenuItem 
                 onClick={() => setIsDeleteDialogOpen(true)} 
                 className="cursor-pointer text-destructive hover:!text-destructive/80 focus:!text-destructive/80 focus:!bg-destructive/10"
-                disabled={isDeletingAccount} // Disable if deletion is in progress from dialog
+                disabled={isDeletingAccount}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 <span>Delete Account</span>
