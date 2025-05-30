@@ -21,7 +21,7 @@ export default function UploadPage() {
   const [fileType, setFileType] = useState<'video' | 'image' | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null); // For client-side validation errors
+  const [error, setError] = useState<string | null>(null);
   const [videoMetadata, setVideoMetadata] = useState<{ width: number; height: number } | null>(null);
 
 
@@ -38,7 +38,7 @@ export default function UploadPage() {
     setError(null);
     setFileType(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""; 
+      fileInputRef.current.value = "";
     }
 
     if (selectedFile) {
@@ -48,7 +48,7 @@ export default function UploadPage() {
         toast({ title: "File Too Large", description: `Cannot upload. ${errorMsg}`, variant: "destructive" });
         return;
       }
-      
+
       let currentFileType: 'video' | 'image' | null = null;
       if (selectedFile.type.startsWith("video/")) {
         if (selectedFile.type !== "video/mp4") {
@@ -70,7 +70,7 @@ export default function UploadPage() {
         toast({ title: "Unsupported File Type", description: "Upload MP4, JPEG, PNG, GIF, or WEBP.", variant: "destructive" });
         return;
       }
-      
+
       setFileType(currentFileType);
       setFile(selectedFile);
       setIsReadingFile(true);
@@ -102,8 +102,9 @@ export default function UploadPage() {
 
   const handleVideoLoad = (event: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const videoElement = event.currentTarget;
+    console.log(`[UploadPage] Video metadata loaded: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
     setVideoMetadata({ width: videoElement.videoWidth, height: videoElement.videoHeight });
-    setError(null);
+    setError(null); // Clear any previous errors like "resolution not available yet"
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -122,26 +123,23 @@ export default function UploadPage() {
     }
 
     setIsProcessing(true);
-    setError(null); // Clear client-side errors before API call
+    setError(null);
 
     if (fileType === 'video') {
+        if (!videoMetadata || videoMetadata.width === 0 || videoMetadata.height === 0) {
+            setError("Video dimensions not available yet. Please wait for the video preview to fully load its metadata.");
+            toast({ title: "Video Metadata Missing", description: "Cannot upload. Please wait for preview to load dimensions.", variant: "destructive" });
+            setIsProcessing(false);
+            return;
+        }
         toast({ title: "Video Upload Started", description: "Your video is being sent to the server..." });
         try {
-            // uploadVideo from context now handles API call and UI updates via placeholders
-            await uploadVideo(file, file.name); 
-            // On success, VideoContext's toast should show. We can optionally navigate.
-            // Don't reset form here, context updates will show the video as 'uploading' or 'processing'
-            // If you want to stay on the page:
-            // setFile(null); setPreviewUrl(null); setFileType(null); if (fileInputRef.current) fileInputRef.current.value = "";
-            // Or navigate:
+            // Pass dimensions to uploadVideo
+            await uploadVideo(file, file.name, videoMetadata.width, videoMetadata.height);
             router.push('/dashboard/my-videos');
-        } catch (errCatch) { 
-            // This catch in the component might be redundant if VideoContext shows a toast for its errors.
-            // However, it can be useful for component-specific error display if needed.
+        } catch (errCatch) {
             console.error("Upload error in component (video):", errCatch);
-            const errorMessage = errCatch instanceof Error ? errCatch.message : "An unexpected error occurred during video upload.";
-            // setError(`Upload failed: ${errorMessage}`); // Display error in the form if needed
-            // Toast is likely already handled by VideoContext
+            // Toast is likely handled by VideoContext
         } finally {
             setIsProcessing(false);
         }
@@ -163,12 +161,12 @@ export default function UploadPage() {
     fileInputRef.current?.click();
   };
 
-  const canSubmit = file && previewUrl && !isReadingFile && !isProcessing;
+  const canSubmit = file && previewUrl && !isReadingFile && !isProcessing && (fileType === 'image' || (fileType === 'video' && videoMetadata && videoMetadata.width > 0 && videoMetadata.height > 0));
   let submitButtonText = "Upload Media";
   if (isProcessing) {
     submitButtonText = "Processing...";
   } else if (fileType === 'video') {
-    submitButtonText = "Upload & Censor Video";
+    submitButtonText = "Upload Video";
   } else if (fileType === 'image') {
     submitButtonText = "Confirm Image";
   }
@@ -217,9 +215,13 @@ export default function UploadPage() {
               <div className="space-y-2">
                 <Label>Video Preview</Label>
                 <VideoPlayer src={previewUrl} onLoadedMetadata={handleVideoLoad} />
-                {videoMetadata && (
+                {videoMetadata && videoMetadata.width > 0 && videoMetadata.height > 0 ? (
                   <div className="flex items-center text-sm p-2 rounded-md bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200">
                     <Video className="h-4 w-4 mr-2 shrink-0" /> Video Resolution: {videoMetadata.width}x{videoMetadata.height}px. Ready for processing.
+                  </div>
+                ) : (
+                  <div className="flex items-center text-sm p-2 rounded-md bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200">
+                    <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin" /> Waiting for video metadata (dimensions)...
                   </div>
                 )}
               </div>
@@ -237,7 +239,7 @@ export default function UploadPage() {
               </div>
             )}
 
-            {error && ( // This error state is for client-side validation errors
+            {error && (
               <div className="flex items-center text-sm text-destructive p-3 bg-destructive/10 border border-destructive/20 rounded-md">
                 <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {error}
               </div>
@@ -247,7 +249,7 @@ export default function UploadPage() {
         <CardFooter>
           <Button
             type="submit"
-            onClick={handleSubmit} // This button is outside the form tag, ensure form is submitted
+            onClick={handleSubmit}
             className="w-full !bg-primary hover:!bg-primary/90 text-primary-foreground"
             disabled={!canSubmit}
           >
@@ -261,3 +263,4 @@ export default function UploadPage() {
     </div>
   );
 }
+
