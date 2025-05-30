@@ -5,7 +5,7 @@ import type { VideoAsset, SelectionCoordinates } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { VideoPlayer } from './video-player';
-import { Download, Clock, AlertTriangle, CheckCircle2, Video, Loader2, PlayCircle, Trash2, Wand2, Crop } from 'lucide-react';
+import { Download, Clock, AlertTriangle, CheckCircle2, Video, Loader2, PlayCircle, Trash2, Crop } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, isValid, parseISO } from 'date-fns';
@@ -46,39 +46,44 @@ export function VideoCard({ video }: VideoCardProps) {
 
   const [showSelectionModal, setShowSelectionModal] = useState(false);
 
-  // Refs to track the video info for which the current blob URL was loaded
   const prevOriginalVideoInfoRef = useRef<{ videoId: string; filename: string | undefined } | null>(null);
   const prevCensoredVideoInfoRef = useRef<{ videoId: string; filename: string | undefined } | null>(null);
 
-  // Refs to hold the actual blob URLs for cleanup, synced with state
   const originalPlayerSrcBlobRef = useRef<string | null>(null);
   const censoredPlayerSrcBlobRef = useRef<string | null>(null);
 
   useEffect(() => {
-    originalPlayerSrcBlobRef.current = originalPlayerSrc;
-  }, [originalPlayerSrc]);
+    const currentOriginalSrc = originalPlayerSrcBlobRef.current;
+    return () => {
+      if (currentOriginalSrc && currentOriginalSrc.startsWith('blob:')) {
+        console.log(`[VideoCard ${video.id}] Original Player UNMOUNT/SRC CHANGE: Revoking old originalPlayerSrc: ${currentOriginalSrc}`);
+        URL.revokeObjectURL(currentOriginalSrc);
+      }
+    };
+  }, [originalPlayerSrc, video.id]); // Re-run if originalPlayerSrc changes or video.id changes
 
   useEffect(() => {
-    censoredPlayerSrcBlobRef.current = censoredPlayerSrc;
-  }, [censoredPlayerSrc]);
+    const currentCensoredSrc = censoredPlayerSrcBlobRef.current;
+    return () => {
+      if (currentCensoredSrc && currentCensoredSrc.startsWith('blob:')) {
+        console.log(`[VideoCard ${video.id}] Censored Player UNMOUNT/SRC CHANGE: Revoking old censoredPlayerSrc: ${currentCensoredSrc}`);
+        URL.revokeObjectURL(currentCensoredSrc);
+      }
+    };
+  }, [censoredPlayerSrc, video.id]); // Re-run if censoredPlayerSrc changes or video.id changes
 
 
   const loadVideoForPreview = useCallback(async (
-    videoApiUrl: string | undefined, // The API endpoint URL for the video stream
-    videoFilenameForApi: string | undefined, // The filename to pass to getVideoApi
-    setSrcState: (url: string | null) => void, // State setter for originalPlayerSrc or censoredPlayerSrc
+    videoApiUrl: string | undefined,
+    videoFilenameForApi: string | undefined,
+    setSrcState: (url: string | null) => void,
     type: 'original' | 'censored',
     setIsLoadingPreviewState: (loading: boolean) => void,
     setPreviewErrorState: (error: string | null) => void,
-    currentBlobRef: React.MutableRefObject<string | null> // Ref to the current blob URL for this type
+    currentBlobRef: React.MutableRefObject<string | null>
   ) => {
     console.log(`[VideoCard ${video.id}] ${type}: loadVideoForPreview called. API URL: ${videoApiUrl}, Filename: ${videoFilenameForApi}`);
     if (!videoApiUrl || !videoFilenameForApi) {
-      if (currentBlobRef.current && currentBlobRef.current.startsWith('blob:')) {
-        console.log(`[VideoCard ${video.id}] ${type}: Aborting load, no API URL or filename. Revoking existing blob: ${currentBlobRef.current}`);
-        URL.revokeObjectURL(currentBlobRef.current);
-      }
-      currentBlobRef.current = null;
       setSrcState(null);
       setIsLoadingPreviewState(false);
       setPreviewErrorState(null);
@@ -87,14 +92,7 @@ export function VideoCard({ video }: VideoCardProps) {
 
     setIsLoadingPreviewState(true);
     setPreviewErrorState(null);
-
-    // Revoke previous blob URL for this specific type if it exists *before* fetching new one
-    if (currentBlobRef.current && currentBlobRef.current.startsWith('blob:')) {
-      console.log(`[VideoCard ${video.id}] ${type}: Revoking previous blob URL: ${currentBlobRef.current} before new load.`);
-      URL.revokeObjectURL(currentBlobRef.current);
-    }
-    currentBlobRef.current = null;
-    setSrcState(null); // Clear the src state to ensure player re-evaluates
+    setSrcState(null); // Clear src before attempting to load new one
 
     const token = await getToken();
     if (!token) {
@@ -113,18 +111,18 @@ export function VideoCard({ video }: VideoCardProps) {
         const errorMsg = blob.size === 0 ? `Received empty file.` : `Expected video, received type: ${blob.type}`;
         console.error(`[VideoCard ${video.id}] ${type}: ${errorMsg}`);
         setPreviewErrorState(errorMsg);
-        setSrcState(null);
+        currentBlobRef.current = null;
       } else {
         const objectUrl = URL.createObjectURL(blob);
         console.log(`[VideoCard ${video.id}] ${type}: Blob URL created: ${objectUrl}`);
-        currentBlobRef.current = objectUrl; // Store new blob URL in ref
+        currentBlobRef.current = objectUrl;
         setSrcState(objectUrl);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : `Failed to load ${type} video preview`;
       console.error(`[VideoCard ${video.id}] ${type}: Error fetching video blob: ${errorMessage}`, err);
       setPreviewErrorState(errorMessage);
-      setSrcState(null);
+      currentBlobRef.current = null;
     } finally {
       setIsLoadingPreviewState(false);
     }
@@ -133,102 +131,95 @@ export function VideoCard({ video }: VideoCardProps) {
 
   // Effect for original video
   useEffect(() => {
-    let isActive = true;
     const currentVideoId = video.id;
     const filenameForOriginal = video.filename;
     const apiUrlForOriginal = video.originalUrl;
+    let isActive = true;
 
-    console.log(`[VideoCard ${currentVideoId}] Original useEffect: status=${video.status}, originalUrl=${apiUrlForOriginal}, filenameForOriginal=${filenameForOriginal}, currentSrc=${originalPlayerSrc}`);
+    console.log(`[VideoCard ${currentVideoId}] Original useEffect: status=${video.status}, originalUrl=${apiUrlForOriginal}, filenameForOriginal=${filenameForOriginal}, currentSrcState=${originalPlayerSrc}`);
 
     if (filenameForOriginal && apiUrlForOriginal && video.status !== 'uploading') {
-      const hasChanged = prevOriginalVideoInfoRef.current?.videoId !== currentVideoId ||
-                         prevOriginalVideoInfoRef.current?.filename !== filenameForOriginal;
-
-      if (!originalPlayerSrc || hasChanged) { // Load if no current src OR if underlying video changed
-        console.log(`[VideoCard ${currentVideoId}] Original useEffect: Needs load/reload. HasChanged: ${hasChanged}, CurrentSrc: ${originalPlayerSrc}`);
-        if (isActive) {
-          prevOriginalVideoInfoRef.current = { videoId: currentVideoId, filename: filenameForOriginal };
-          loadVideoForPreview(apiUrlForOriginal, filenameForOriginal, setOriginalPlayerSrc, 'original', setIsLoadingOriginalPreview, setOriginalPreviewError, originalPlayerSrcBlobRef);
+        const hasChanged = prevOriginalVideoInfoRef.current?.videoId !== currentVideoId ||
+                             prevOriginalVideoInfoRef.current?.filename !== filenameForOriginal;
+      
+        if (originalPlayerSrc === null || hasChanged) {
+            console.log(`[VideoCard ${currentVideoId}] Original useEffect: Needs load/reload. HasChanged: ${hasChanged}, CurrentSrcState: ${originalPlayerSrc}`);
+            if (isActive) {
+                prevOriginalVideoInfoRef.current = { videoId: currentVideoId, filename: filenameForOriginal };
+                loadVideoForPreview(apiUrlForOriginal, filenameForOriginal, setOriginalPlayerSrc, 'original', setIsLoadingOriginalPreview, setOriginalPreviewError, originalPlayerSrcBlobRef);
+            }
         }
-      }
     } else if (video.status === 'uploading' && video.originalUrl?.startsWith('blob:')) {
-      if (isActive && originalPlayerSrc !== video.originalUrl) { // If placeholder blob URL provided directly
-        if (originalPlayerSrcBlobRef.current && originalPlayerSrcBlobRef.current.startsWith('blob:')) URL.revokeObjectURL(originalPlayerSrcBlobRef.current);
-        setOriginalPlayerSrc(video.originalUrl);
-        setOriginalPreviewError(null);
-         // Update ref for consistency, though this blob wasn't fetched by loadVideoForPreview
-        originalPlayerSrcBlobRef.current = video.originalUrl;
-        prevOriginalVideoInfoRef.current = { videoId: currentVideoId, filename: filenameForOriginal };
-      }
-    } else { // Conditions not met to display original (e.g. missing URL/filename)
-      if (isActive && originalPlayerSrcBlobRef.current && originalPlayerSrcBlobRef.current.startsWith('blob:')) {
-        console.log(`[VideoCard ${currentVideoId}] Original useEffect: Clearing original preview. Revoking: ${originalPlayerSrcBlobRef.current}`);
-        URL.revokeObjectURL(originalPlayerSrcBlobRef.current);
-        originalPlayerSrcBlobRef.current = null;
-        setOriginalPlayerSrc(null);
-      }
-       if (isActive) setOriginalPreviewError(null);
-       prevOriginalVideoInfoRef.current = null; // Reset since it's not valid anymore
+        if (isActive && originalPlayerSrc !== video.originalUrl) {
+            setOriginalPlayerSrc(video.originalUrl);
+            originalPlayerSrcBlobRef.current = video.originalUrl; // Sync ref
+            setOriginalPreviewError(null);
+            prevOriginalVideoInfoRef.current = { videoId: currentVideoId, filename: filenameForOriginal };
+        }
+    } else {
+        if (isActive && originalPlayerSrc !== null) {
+            setOriginalPlayerSrc(null); // This will trigger the cleanup effect for originalPlayerSrcBlobRef
+        }
+        if (isActive) setOriginalPreviewError(null);
+        prevOriginalVideoInfoRef.current = null;
     }
     return () => { isActive = false; };
-  }, [video.id, video.originalUrl, video.filename, video.status, loadVideoForPreview]);
+  }, [video.id, video.originalUrl, video.filename, video.status, loadVideoForPreview, originalPlayerSrc]);
 
 
   // Effect for censored video
   useEffect(() => {
-    let isActive = true;
     const currentVideoId = video.id;
     const filenameForCensored = video.processedFilename;
     const apiUrlForCensored = video.censoredUrl;
+    let isActive = true;
 
-    console.log(`[VideoCard ${currentVideoId}] Censored useEffect: status=${video.status}, censoredUrl=${apiUrlForCensored}, filenameForCensored=${filenameForCensored}, currentSrc=${censoredPlayerSrc}`);
+    console.log(`[VideoCard ${currentVideoId}] Censored useEffect: status=${video.status}, censoredUrl=${apiUrlForCensored}, filenameForCensored=${filenameForCensored}, currentSrcState=${censoredPlayerSrc}`);
 
     if (video.status === 'censored' && filenameForCensored && apiUrlForCensored) {
-      const hasChanged = prevCensoredVideoInfoRef.current?.videoId !== currentVideoId ||
-                         prevCensoredVideoInfoRef.current?.filename !== filenameForCensored;
+        const hasChanged = prevCensoredVideoInfoRef.current?.videoId !== currentVideoId ||
+                           prevCensoredVideoInfoRef.current?.filename !== filenameForCensored;
 
-      if (!censoredPlayerSrc || hasChanged) { // Load if no current src OR if underlying video changed
-        console.log(`[VideoCard ${currentVideoId}] Censored useEffect: Needs load/reload. HasChanged: ${hasChanged}, CurrentSrc: ${censoredPlayerSrc}`);
-        if (isActive) {
-          prevCensoredVideoInfoRef.current = { videoId: currentVideoId, filename: filenameForCensored };
-          loadVideoForPreview(apiUrlForCensored, filenameForCensored, setCensoredPlayerSrc, 'censored', setIsLoadingCensoredPreview, setCensoredPreviewError, censoredPlayerSrcBlobRef);
+        if (censoredPlayerSrc === null || hasChanged) {
+            console.log(`[VideoCard ${currentVideoId}] Censored useEffect: Needs load/reload. HasChanged: ${hasChanged}, CurrentSrcState: ${censoredPlayerSrc}`);
+            if (isActive) {
+                prevCensoredVideoInfoRef.current = { videoId: currentVideoId, filename: filenameForCensored };
+                loadVideoForPreview(apiUrlForCensored, filenameForCensored, setCensoredPlayerSrc, 'censored', setIsLoadingCensoredPreview, setCensoredPreviewError, censoredPlayerSrcBlobRef);
+            }
         }
-      }
-    } else { // If not in 'censored' state or missing info, ensure censored preview is cleared.
-      if (isActive && censoredPlayerSrcBlobRef.current && censoredPlayerSrcBlobRef.current.startsWith('blob:')) {
-        console.log(`[VideoCard ${currentVideoId}] Censored useEffect: Clearing censored preview. Revoking: ${censoredPlayerSrcBlobRef.current}`);
-        URL.revokeObjectURL(censoredPlayerSrcBlobRef.current);
-        censoredPlayerSrcBlobRef.current = null;
-        setCensoredPlayerSrc(null);
-      }
-      if (isActive) setCensoredPreviewError(null);
-      prevCensoredVideoInfoRef.current = null; // Reset since it's not valid anymore
+    } else {
+        if (isActive && censoredPlayerSrc !== null) {
+            setCensoredPlayerSrc(null); // This will trigger the cleanup effect for censoredPlayerSrcBlobRef
+        }
+        if (isActive) setCensoredPreviewError(null);
+        prevCensoredVideoInfoRef.current = null;
     }
     return () => { isActive = false; };
-  }, [video.id, video.status, video.processedFilename, video.censoredUrl, loadVideoForPreview]);
+  }, [video.id, video.status, video.processedFilename, video.censoredUrl, loadVideoForPreview, censoredPlayerSrc]);
 
 
-  // Final unmount cleanup for the component
+  // Final unmount cleanup for the component instance (redundant if per-src effects are solid, but good for safety)
   useEffect(() => {
+    const originalBlobAtUnmount = originalPlayerSrcBlobRef.current;
+    const censoredBlobAtUnmount = censoredPlayerSrcBlobRef.current;
     return () => {
-      if (originalPlayerSrcBlobRef.current && originalPlayerSrcBlobRef.current.startsWith('blob:')) {
-        console.log(`[VideoCard ${video.id}] Component UNMOUNT: Revoking originalPlayerSrc: ${originalPlayerSrcBlobRef.current}`);
-        URL.revokeObjectURL(originalPlayerSrcBlobRef.current);
+      if (originalBlobAtUnmount && originalBlobAtUnmount.startsWith('blob:')) {
+        console.log(`[VideoCard ${video.id}] Component UNMOUNT: Final Revoke originalPlayerSrc: ${originalBlobAtUnmount}`);
+        URL.revokeObjectURL(originalBlobAtUnmount);
       }
-      if (censoredPlayerSrcBlobRef.current && censoredPlayerSrcBlobRef.current.startsWith('blob:')) {
-        console.log(`[VideoCard ${video.id}] Component UNMOUNT: Revoking censoredPlayerSrc: ${censoredPlayerSrcBlobRef.current}`);
-        URL.revokeObjectURL(censoredPlayerSrcBlobRef.current);
+      if (censoredBlobAtUnmount && censoredBlobAtUnmount.startsWith('blob:')) {
+        console.log(`[VideoCard ${video.id}] Component UNMOUNT: Final Revoke censoredPlayerSrc: ${censoredBlobAtUnmount}`);
+        URL.revokeObjectURL(censoredBlobAtUnmount);
       }
     };
-  }, [video.id]); // video.id is included to ensure if the card instance is reused for a different video, old blobs are cleaned up. Better would be just [] if instances are truly unique per video.
+  }, [video.id]);
 
   const handleDownload = (type: 'original' | 'censored') => {
     downloadVideoFromContext(video, type);
   };
 
   const handleDeleteVideo = () => {
-    if (!video.filename) return; // Should use video.id for context's deleteVideo
-    // Assuming video.id is the unique S3 key (user_id/filename.mp4)
+    if (!video.filename) return;
     deleteVideo(video.id, video.filename, video.processedFilename);
   };
 
@@ -242,7 +233,7 @@ export function VideoCard({ video }: VideoCardProps) {
 
   const handleConfirmSelectionAndProcess = (coordinates: SelectionCoordinates) => {
     setShowSelectionModal(false);
-    if (video.status === 'uploaded' && video.filename) { // Use video.id or filename as appropriate for context
+    if (video.status === 'uploaded' && video.filename) {
       processVideoFromContext(video, coordinates);
     }
   };
@@ -283,13 +274,13 @@ export function VideoCard({ video }: VideoCardProps) {
     isLoading: boolean,
     errorMsg: string | null,
     type: 'original' | 'censored',
-    apiStreamUrl?: string, // e.g., video.originalUrl or video.censoredUrl
-    filenameForApiCall?: string // e.g., video.filename or video.processedFilename
+    apiStreamUrl?: string,
+    filenameForApiCall?: string
   ) => {
     console.log(`[VideoCard ${video.id}] ${type}: Rendering VideoPlayer with src: ${playerSrc}, isLoading: ${isLoading}, errorMsg: ${errorMsg}`);
     if (isLoading) {
       return (
-        <div className="flex flex-col items-center justify-center h-48 bg-muted rounded-md">
+        <div className="flex flex-col items-center justify-center h-full bg-muted rounded-md">
           <Loader2 className="w-12 h-12 text-primary animate-spin mb-2" />
           <p className="text-muted-foreground">Loading {type} preview...</p>
         </div>
@@ -297,7 +288,7 @@ export function VideoCard({ video }: VideoCardProps) {
     }
     if (errorMsg) {
          return (
-            <div className="flex flex-col items-center justify-center h-48 bg-destructive/10 rounded-md text-destructive p-4 text-center">
+            <div className="flex flex-col items-center justify-center h-full bg-destructive/10 rounded-md text-destructive p-4 text-center">
                 <AlertTriangle className="w-12 h-12 mb-2" />
                 <p className="font-semibold">Error Loading {type} Preview</p>
                 <p className="text-xs">{errorMsg}</p>
@@ -315,7 +306,6 @@ export function VideoCard({ video }: VideoCardProps) {
         );
     }
     if (playerSrc) {
-      // Key prop ensures VideoPlayer re-mounts if src (blob URL) changes
       return <VideoPlayer key={playerSrc} src={playerSrc} />;
     }
 
@@ -327,7 +317,7 @@ export function VideoCard({ video }: VideoCardProps) {
 
     const canRetryLoad = apiStreamUrl && filenameForApiCall;
     return (
-      <div className="flex flex-col items-center justify-center h-48 bg-muted rounded-md">
+      <div className="flex flex-col items-center justify-center h-full bg-muted rounded-md">
         { (type === 'original' && video.status === 'uploading') || (type === 'censored' && video.status === 'censoring') ?
             <Loader2 className="w-12 h-12 text-primary animate-spin mb-2" /> :
             <Video className="w-12 h-12 text-muted-foreground mb-2" />
@@ -351,10 +341,6 @@ export function VideoCard({ video }: VideoCardProps) {
 
   const isCensoredTabDisabled = !(video.status === 'censored' && video.censoredUrl && video.processedFilename);
   const isOriginalTabDisabled = video.status === 'uploading' && !video.originalUrl?.startsWith('blob:');
-
-  console.log(`[VideoCard ${video.id}] RENDER: originalPlayerSrc=${originalPlayerSrc}, censoredPlayerSrc=${censoredPlayerSrc}, isLoadingCensored=${isLoadingCensoredPreview}, censoredError=${censoredPreviewError}`);
-  console.log(`[VideoCard ${video.id}] RENDER: video.status=${video.status}, video.censoredUrl=${video.censoredUrl}, video.processedFilename=${video.processedFilename}`);
-  console.log(`[VideoCard ${video.id}] RENDER: isCensoredTabDisabled=${isCensoredTabDisabled}`);
 
   const processButtonDisabled = video.status !== 'uploaded' || !video.originalWidth || !video.originalHeight;
   let processButtonTooltip = "Process this video to enable region selection for censoring.";
@@ -396,10 +382,14 @@ export function VideoCard({ video }: VideoCardProps) {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="original" className="mt-4">
-                {renderVideoPreview(originalPlayerSrc, isLoadingOriginalPreview, originalPreviewError, 'original', video.originalUrl, video.filename)}
+                <div className="relative w-full aspect-video bg-black rounded-md overflow-hidden">
+                    {renderVideoPreview(originalPlayerSrc, isLoadingOriginalPreview, originalPreviewError, 'original', video.originalUrl, video.filename)}
+                </div>
               </TabsContent>
               <TabsContent value="censored" className="mt-4">
-                {renderVideoPreview(censoredPlayerSrc, isLoadingCensoredPreview, censoredPreviewError, 'censored', video.censoredUrl, video.processedFilename)}
+                <div className="relative w-full aspect-video bg-black rounded-md overflow-hidden">
+                    {renderVideoPreview(censoredPlayerSrc, isLoadingCensoredPreview, censoredPreviewError, 'censored', video.censoredUrl, video.processedFilename)}
+                </div>
               </TabsContent>
             </Tabs>
         </CardContent>
@@ -498,5 +488,3 @@ export function VideoCard({ video }: VideoCardProps) {
     </>
   );
 }
-
-    
