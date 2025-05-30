@@ -22,14 +22,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning> 
       <body className={`${inter.variable} font-sans antialiased`}>
-        <ThemeProvider>
-          <AuthProvider> {/* Wrap with AuthProvider */}
+        <AuthProvider> {/* AuthProvider now wraps ThemeProvider */}
+          <ThemeProvider>
             <VideoProvider>
               {children}
               <Toaster />
             </VideoProvider>
-          </AuthProvider>
-        </ThemeProvider>
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );
