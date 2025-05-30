@@ -22,7 +22,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper function to clear DAG tokens from localStorage
 const clearDagTokens = () => {
   console.log("[CLIENT] AuthProvider:clearDagTokens - Clearing stored DAG tokens from localStorage.");
   localStorage.removeItem('kc_access_token');
@@ -39,10 +38,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
   const pathname = usePathname();
   const keycloakActualInitInvokedRef = useRef(false);
-  const { setTheme } = useTheme(); // Get setTheme from ThemeContext
+  const { setTheme } = useTheme();
 
-
-  // Effect to instantiate Keycloak.js client
   useEffect(() => {
     console.log('[CLIENT] AuthProvider:useEffect[] - Getting Keycloak instance.');
     const kc = getKeycloakInstance();
@@ -56,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const performInitialization = useCallback(async (kcInstance: Keycloak) => {
     console.log(`[CLIENT] AuthProvider:performInitialization - Starting for path: ${pathname}`);
-    setIsLoading(true);
+    setIsLoading(true); // Set loading true at the start of initialization attempt
 
     let initOptions: Keycloak.KeycloakInitOptions = {};
     let authenticatedByInit = false;
@@ -72,9 +69,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         initOptions = {
           token: storedAccessToken,
           refreshToken: storedRefreshToken,
-          idToken: storedIdToken ?? undefined, // Pass idToken if present
-          checkLoginIframe: false, // Recommended when initializing with tokens
-          // pkceMethod is not typically needed here as we are not doing a code flow.
+          idToken: storedIdToken ?? undefined,
+          checkLoginIframe: false, // Crucial for this flow
         };
         console.log(`[CLIENT] AuthProvider:performInitialization - Calling keycloak.init() with PRE-OBTAINED TOKENS. Options:`, {token: "...", refreshToken: "...", idToken: storedIdToken ? "..." : undefined, checkLoginIframe: false});
         
@@ -82,13 +78,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.log(`[CLIENT] AuthProvider:performInitialization - keycloak.init() with PRE-OBTAINED TOKENS returned: ${authenticatedByInit}`);
         console.log(`[CLIENT] AuthProvider:performInitialization - AFTER init with tokens, kcInstance.authenticated is: ${kcInstance.authenticated}`);
         
-        // Clear localStorage tokens AFTER attempting to use them for init
-        clearDagTokens();
+        clearDagTokens(); // Clear tokens after attempting to use them
 
         if (!kcInstance.authenticated) {
             console.warn("[CLIENT] AuthProvider:performInitialization - Init with stored tokens did NOT result in authenticated state.");
         }
-
       } else {
         console.log("[CLIENT] AuthProvider:performInitialization - No stored DAG tokens found. Using default init options (check-sso).");
         initOptions = {
@@ -102,7 +96,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const currentAuthStatus = !!kcInstance.authenticated;
-      setIsAuthenticated(currentAuthStatus);
+      setIsAuthenticated(currentAuthStatus); // Update React state
       console.log(`[CLIENT] AuthProvider:performInitialization - isAuthenticated state set to: ${currentAuthStatus}`);
 
       if (currentAuthStatus) {
@@ -114,21 +108,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (kcInstance.token) {
             logTokenOnServer(kcInstance.token).catch(e => console.error("[CLIENT] AuthProvider:performInitialization - Error in logTokenOnServer (after profile):", e));
             
-            // Fetch and apply user preferences
             try {
               console.log('[CLIENT] AuthProvider:performInitialization - Fetching user preferences...');
               const preferences = await getPreferenceApi(kcInstance.token);
               console.log('[CLIENT] AuthProvider:performInitialization - User preferences received:', preferences);
               if (preferences && preferences.theme) {
                 console.log(`[CLIENT] AuthProvider:performInitialization - Applying theme from preferences: ${preferences.theme}`);
-                setTheme(preferences.theme); // setTheme from useTheme()
+                setTheme(preferences.theme);
               } else {
                 console.log('[CLIENT] AuthProvider:performInitialization - No theme preference found in API response.');
               }
             } catch (prefError) {
               console.error("[CLIENT] AuthProvider:performInitialization - Error fetching user preferences:", prefError);
             }
-
           }
         } catch (profileError) {
           console.error("[CLIENT] AuthProvider:performInitialization - Error loading user profile:", profileError);
@@ -140,7 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         console.log('[CLIENT] AuthProvider:performInitialization - User IS NOT effectively authenticated after this run.');
         setUser(null);
-        if (storedAccessToken) clearDagTokens(); 
+        // if (storedAccessToken) clearDagTokens(); // Already cleared above if tokens were present
       }
     } catch (error: any) {
       console.error("[CLIENT] AuthProvider:performInitialization - Outer catch block error during Keycloak initialization.", error);
@@ -151,55 +143,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       setIsAuthenticated(false);
       setUser(null);
-      clearDagTokens(); 
+      clearDagTokens();
     } finally {
       setIsLoading(false);
-      console.log(`[CLIENT] AuthProvider:performInitialization - Initialization process finished. isLoading: ${isLoading} isAuthenticated (state): ${isAuthenticated} keycloak.authenticated (instance): ${kcInstance?.authenticated}`);
+      console.log(`[CLIENT] AuthProvider:performInitialization - Initialization process finished. isLoading: ${isLoading} isAuthenticated (state): ${isAuthenticated} keycloak.authenticated (instance): ${keycloak?.authenticated}`);
     }
-  }, [pathname, setTheme]); // Added setTheme to dependencies
+  }, [pathname, setTheme]); // Added setTheme
 
-  // Effect to initialize Keycloak only once and handle path changes for re-sync
   useEffect(() => {
-    console.log(`[CLIENT] AuthProvider:useEffect[keycloak, pathname] - Path: ${pathname}. kc.auth before performInitialization: ${keycloak?.authenticated}, actualInitInvokedRef: ${keycloakActualInitInvokedRef.current}`);
     if (keycloak && !keycloakActualInitInvokedRef.current) {
-      console.log("[CLIENT] AuthProvider:useEffect[keycloak, pathname] - Keycloak instance available and init not yet invoked. Calling performInitialization.");
-      keycloakActualInitInvokedRef.current = true; // Set flag before calling init
+      console.log(`[CLIENT] AuthProvider:useEffect[keycloak] - Keycloak instance available and init not yet invoked. Path: ${pathname}. Calling performInitialization.`);
+      keycloakActualInitInvokedRef.current = true; // Set flag BEFORE calling init
       performInitialization(keycloak);
     } else if (keycloak && keycloakActualInitInvokedRef.current) {
-      console.log(`[CLIENT] AuthProvider:useEffect[keycloak, pathname] - Init already attempted or in progress. Current kc.auth: ${keycloak.authenticated}. Syncing React state if needed.`);
-      // If init was already done, just sync React state with Keycloak instance state
+      // This block handles route changes after initial init was already attempted.
+      // We mainly want to ensure isLoading is false and sync React state if needed.
+      console.log(`[CLIENT] AuthProvider:useEffect[keycloak] - Init already attempted or in progress. Path: ${pathname}. Current kc.auth: ${keycloak.authenticated}. Syncing React state if needed.`);
       const currentAuthStatus = !!keycloak.authenticated;
       if (isAuthenticated !== currentAuthStatus) {
         setIsAuthenticated(currentAuthStatus);
-        console.log(`[CLIENT] AuthProvider:useEffect[keycloak, pathname] - Synced isAuthenticated state to: ${currentAuthStatus}`);
+        console.log(`[CLIENT] AuthProvider:useEffect[keycloak] - Synced isAuthenticated state to: ${currentAuthStatus} for path ${pathname}`);
       }
       if (currentAuthStatus && !user && keycloak.token) {
-        console.log("[CLIENT] AuthProvider:useEffect[keycloak, pathname] - Authenticated but no user object, attempting to load profile.");
+        console.log("[CLIENT] AuthProvider:useEffect[keycloak] - Authenticated but no user object, attempting to load profile.");
         keycloak.loadUserProfile().then(profile => setUser(profile as UserProfile)).catch(() => {
-          console.error("[CLIENT] AuthProvider:useEffect[keycloak, pathname] - Failed to load profile for already authenticated user.");
+          console.error("[CLIENT] AuthProvider:useEffect[keycloak] - Failed to load profile for already authenticated user.");
+          setIsAuthenticated(false); // Revert if profile load fails
           setUser(null);
-          setIsAuthenticated(false);
           if(keycloak.token) keycloak.clearToken();
           clearDagTokens();
         });
       } else if (!currentAuthStatus && user) {
         setUser(null);
-         console.log("[CLIENT] AuthProvider:useEffect[keycloak, pathname] - Not authenticated but user object exists, clearing user.");
+        console.log("[CLIENT] AuthProvider:useEffect[keycloak] - Not authenticated but user object exists, clearing user.");
       }
-      // Ensure isLoading is false if init was already attempted and we are just re-syncing
-      if (isLoading) setIsLoading(false);
+      if (isLoading) { // Ensure loading is false if init was already attempted
+        setIsLoading(false);
+        console.log("[CLIENT] AuthProvider:useEffect[keycloak] - Setting isLoading to false as init was already attempted.");
+      }
     }
-  }, [keycloak, pathname, performInitialization, isAuthenticated, user, isLoading]); // Added isAuthenticated, user, isLoading to ensure re-sync logic runs if these external states change
+  }, [keycloak, pathname, performInitialization, isAuthenticated, user, isLoading]); // Added isAuthenticated, user, isLoading
 
-
-  // Effect to set up Keycloak event handlers
   useEffect(() => {
     if (!keycloak) {
-      console.log("[CLIENT] AuthProvider:useEffect[keycloak event handlers] - Keycloak instance not yet available. Skipping event handler setup.");
+      console.log("[CLIENT] AuthProvider:useEffect[event handlers] - Keycloak instance not yet available. Skipping event handler setup.");
       return;
     }
-
-    console.log("[CLIENT] AuthProvider:useEffect[keycloak event handlers] - Setting up Keycloak event handlers.");
+    console.log("[CLIENT] AuthProvider:useEffect[event handlers] - Setting up Keycloak event handlers.");
 
     const onAuthSuccess = async () => {
       console.log('[CLIENT] Keycloak EVENT: onAuthSuccess triggered. kc.authenticated:', keycloak.authenticated);
@@ -211,7 +201,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.log('[CLIENT] Keycloak EVENT: onAuthSuccess - User profile loaded:', profile);
           if (keycloak.token) {
             logTokenOnServer(keycloak.token).catch(e => console.error("[CLIENT] Keycloak EVENT: onAuthSuccess - Error calling logTokenOnServer:", e));
-            // Fetch preferences on auth success as well
             console.log('[CLIENT] Keycloak EVENT: onAuthSuccess - Fetching user preferences...');
             const preferences = await getPreferenceApi(keycloak.token);
             console.log('[CLIENT] Keycloak EVENT: onAuthSuccess - User preferences received:', preferences);
@@ -224,23 +213,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         } catch (err) {
           console.error("[CLIENT] Keycloak EVENT: onAuthSuccess - Error loading profile or preferences:", err);
+          setIsAuthenticated(false); 
           setUser(null);
-          setIsAuthenticated(false);
           if(keycloak.token) keycloak.clearToken();
           clearDagTokens();
         }
       } else {
         setUser(null);
-        setIsAuthenticated(false); // Ensure consistent state
+        setIsAuthenticated(false);
       }
-      setIsLoading(false);
+      setIsLoading(false); // Ensure loading is false after auth success
     };
 
     const onAuthError = (errorData?: Keycloak.KeycloakError) => {
       console.error("[CLIENT] Keycloak EVENT: onAuthError triggered.", errorData);
-      if (errorData) {
-        console.error(`Error: ${errorData.error}, Description: ${errorData.error_description}`);
-      }
+      if (errorData) console.error(`Error: ${errorData.error}, Description: ${errorData.error_description}`);
       setIsAuthenticated(false);
       setUser(null);
       clearDagTokens();
@@ -249,7 +236,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const onAuthRefreshSuccess = () => {
        console.log('[CLIENT] Keycloak EVENT: onAuthRefreshSuccess triggered.');
-       setIsAuthenticated(!!keycloak.authenticated); // Re-affirm auth state
+       setIsAuthenticated(!!keycloak.authenticated);
        if (keycloak.token && keycloak.authenticated) {
            logTokenOnServer(keycloak.token).catch(e => console.error("[CLIENT] Keycloak EVENT: onAuthRefreshSuccess - Error calling logTokenOnServer:", e));
        }
@@ -269,23 +256,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsAuthenticated(false);
       setUser(null);
       clearDagTokens();
-      console.log("[CLIENT] Keycloak EVENT: onAuthLogout - Cleared DAG tokens from localStorage.");
-      setIsLoading(false); // Ensure loading is false on logout
+      setIsLoading(false);
     };
 
     const onTokenExpired = () => {
       console.log('[CLIENT] Keycloak EVENT: onTokenExpired triggered. Attempting token refresh...');
-      keycloak.updateToken(30) // Attempt to refresh if token expires in <30s
+      keycloak.updateToken(30)
         .then(refreshed => {
           if (refreshed) {
             console.log('[CLIENT] Keycloak EVENT: onTokenExpired - Token was refreshed successfully.');
-            if (keycloak.token) {
-                logTokenOnServer(keycloak.token);
-            }
+            if (keycloak.token) logTokenOnServer(keycloak.token);
           } else {
             console.log('[CLIENT] Keycloak EVENT: onTokenExpired - Token not refreshed (still valid or refresh not needed). kc.authenticated:', keycloak.authenticated);
-             // If not refreshed and not authenticated, it implies a real expiry/problem
-             if (!keycloak.authenticated) {
+            if (!keycloak.authenticated) {
                 setIsAuthenticated(false);
                 setUser(null);
                 clearDagTokens();
@@ -298,24 +281,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUser(null);
           if (keycloak.token) keycloak.clearToken();
           clearDagTokens();
-          setIsLoading(false); // Stop loading on failure
+          setIsLoading(false);
       });
     };
 
-    // Use 'keycloak' from state, not 'kcInstance' from a different scope
     keycloak.onAuthSuccess = onAuthSuccess;
     keycloak.onAuthError = onAuthError;
     keycloak.onAuthRefreshSuccess = onAuthRefreshSuccess;
     keycloak.onAuthRefreshError = onAuthRefreshError;
     keycloak.onAuthLogout = onAuthLogout;
     keycloak.onTokenExpired = onTokenExpired;
-    console.log('[CLIENT] AuthProvider:useEffect[keycloak event handlers] - Keycloak event handlers successfully registered.');
+    console.log('[CLIENT] AuthProvider:useEffect[event handlers] - Keycloak event handlers successfully registered.');
 
-    // Cleanup function to remove handlers if Keycloak instance changes or component unmounts
-    // Though typically Keycloak instance doesn't change.
     return () => {
-        console.log("[CLIENT] AuthProvider:useEffect[keycloak event handlers] - Cleaning up Keycloak event handlers (if keycloak instance existed).");
-        if (keycloak) { // Check if keycloak instance was set before trying to clear handlers
+        console.log("[CLIENT] AuthProvider:useEffect[event handlers] - Cleaning up Keycloak event handlers.");
+        if (keycloak) {
             keycloak.onAuthSuccess = undefined;
             keycloak.onAuthError = undefined;
             keycloak.onAuthRefreshSuccess = undefined;
@@ -324,8 +304,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             keycloak.onTokenExpired = undefined;
         }
     };
-  }, [keycloak, setTheme]); // Ensure setTheme is in dependencies because onAuthSuccess uses it
-
+  }, [keycloak, setTheme]); // Added setTheme
 
   const login = useCallback(async (options?: Keycloak.KeycloakLoginOptions) => {
     if (keycloak) {
@@ -335,13 +314,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
       console.log('[CLIENT] AuthProvider:login - Standard Keycloak login initiated. Options:', defaultOptions);
       setIsLoading(true);
-      try {
-        await keycloak.login(defaultOptions);
-        // Redirect happens, so code after this might not execute immediately in this context
-      } catch (e) {
-        console.error('[CLIENT] AuthProvider:login - keycloak.login() threw an error', e);
-        setIsLoading(false); 
-      }
+      await keycloak.login(defaultOptions);
     } else {
       console.error('[CLIENT] AuthProvider:login - Keycloak instance not available.');
       setIsLoading(false);
@@ -353,20 +326,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.log('[CLIENT] AuthProvider:logout - Logout initiated.');
       setIsLoading(true);
       clearDagTokens(); 
-      try {
-        await keycloak.logout({ redirectUri: typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined });
-        // Redirect happens
-      } catch (e) {
-        console.error('[CLIENT] AuthProvider:logout - keycloak.logout() threw an error. Manual state reset.', e);
-        setIsAuthenticated(false);
-        setUser(null);
-        setIsLoading(false); 
-        clearDagTokens(); 
-        if (typeof window !== 'undefined') {
-          // Force redirect if Keycloak's logout didn't
-          window.location.href = '/login?logoutFailed=true';
-        }
-      }
+      await keycloak.logout({ redirectUri: typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined });
     } else {
       console.error('[CLIENT] AuthProvider:logout - Keycloak instance not available.');
       setIsLoading(false);
@@ -377,13 +337,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (keycloak) {
       console.log('[CLIENT] AuthProvider:register - Standard Keycloak registration initiated. Options:', options);
       setIsLoading(true);
-      try {
-        await keycloak.register(options);
-        // Redirect to Keycloak's registration page happens
-      } catch (e) {
-        console.error('[CLIENT] AuthProvider:register - keycloak.register() threw an error', e);
-        setIsLoading(false);
-      }
+      await keycloak.register(options);
     } else {
       console.error('[CLIENT] AuthProvider:register - Keycloak instance not available.');
       setIsLoading(false);
@@ -396,21 +350,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return undefined;
     }
     try {
-      // Attempt to update token, force refresh if it's expiring within 5 seconds
       const refreshed = await keycloak.updateToken(5); 
       if (refreshed) {
         console.log('[CLIENT] AuthProvider:getToken - Token was refreshed.');
-        if (keycloak.token) {
-           logTokenOnServer(keycloak.token).catch(e => console.error("[CLIENT] AuthProvider:getToken - Error calling logTokenOnServer (after refresh):", e));
-        }
-      } else {
-        // console.log('[CLIENT] AuthProvider:getToken - Token not refreshed (still valid or refresh not needed).');
+        if (keycloak.token) logTokenOnServer(keycloak.token);
       }
     } catch (error) {
       console.error('[CLIENT] AuthProvider:getToken - Error updating token. Session might be invalid.', error);
-      setIsAuthenticated(false); // Session is likely invalid
+      setIsAuthenticated(false); 
       setUser(null);
-      clearDagTokens(); // Clear any stored tokens
+      clearDagTokens();
       return undefined;
     }
     return keycloak.token;
@@ -432,3 +381,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+    
