@@ -44,38 +44,46 @@ export function VideoRegionSelector({
 
   useEffect(() => {
     if (isOpen) {
-      console.log('[VideoRegionSelector] Dialog opened. Resetting state. Original Dims:', { originalVideoWidth, originalVideoHeight });
+      console.log('[VideoRegionSelector] Dialog opened. Resetting state. Original Dims from props:', { originalVideoWidth, originalVideoHeight });
       setIsDrawing(false);
       setStartPoint(null);
       setEndPoint(null);
       setSelection(null);
-      setDisplayedVideoMetrics(null); // Reset video metrics
+      setDisplayedVideoMetrics(null); 
     }
   }, [isOpen, originalVideoWidth, originalVideoHeight]);
 
   const handleVideoLoad = useCallback((event: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    if (!fixedAspectContainerRef.current) {
-        console.warn('[VideoRegionSelector] handleVideoLoad: fixedAspectContainerRef not available.');
-        setDisplayedVideoMetrics(null);
-        return;
-    }
-
-    const videoElement = event.currentTarget;
-    const videoNativeWidth = videoElement.videoWidth;
-    const videoNativeHeight = videoElement.videoHeight;
-
-    if (videoNativeWidth === 0 || videoNativeHeight === 0) {
-      console.warn('[VideoRegionSelector] Video metadata loaded with 0x0 dimensions.');
+    if (!fixedAspectContainerRef.current || !originalVideoWidth || !originalVideoHeight) {
+      console.warn('[VideoRegionSelector] handleVideoLoad: Guard failed. Ref or original dimensions props missing.', {
+          hasRef: !!fixedAspectContainerRef.current,
+          originalVideoWidth,
+          originalVideoHeight
+      });
       setDisplayedVideoMetrics(null);
       return;
     }
+
+    // Use PROPS for native dimensions as videoElement.videoWidth/Height from event can be unreliable for this calculation.
+    const videoNativeWidth = originalVideoWidth; 
+    const videoNativeHeight = originalVideoHeight;
+
+    if (videoNativeWidth === 0 || videoNativeHeight === 0) {
+      console.warn('[VideoRegionSelector] Original dimensions from props are 0x0. Cannot calculate display metrics.');
+      setDisplayedVideoMetrics(null);
+      return;
+    }
+    
+    const videoElement = event.currentTarget; // Still useful for knowing the event fired.
+    console.log(`[VideoRegionSelector] handleVideoLoad: event.currentTarget.videoWidth=${videoElement.videoWidth}, event.currentTarget.videoHeight=${videoElement.videoHeight}. Using props for calculation: ${videoNativeWidth}x${videoNativeHeight}`);
+
 
     const containerRect = fixedAspectContainerRef.current.getBoundingClientRect();
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
 
     if (containerWidth === 0 || containerHeight === 0) {
-      console.warn('[VideoRegionSelector] Fixed aspect container has 0x0 dimensions.');
+      console.warn('[VideoRegionSelector] Fixed aspect container has 0x0 dimensions (containerRect).');
       setDisplayedVideoMetrics(null);
       return;
     }
@@ -86,20 +94,18 @@ export function VideoRegionSelector({
     let newDisplayedWidth, newDisplayedHeight, newOffsetX, newOffsetY;
 
     if (videoActualAspectRatio > containerAspectRatio) {
-      // Video is wider than container (letterboxed top/bottom if container is taller, or fits width perfectly)
       newDisplayedWidth = containerWidth;
       newDisplayedHeight = containerWidth / videoActualAspectRatio;
       newOffsetX = 0;
       newOffsetY = (containerHeight - newDisplayedHeight) / 2;
     } else {
-      // Video is taller than container or same aspect ratio (pillarboxed left/right if container is wider, or fits height perfectly)
       newDisplayedHeight = containerHeight;
       newDisplayedWidth = containerHeight * videoActualAspectRatio;
       newOffsetY = 0;
       newOffsetX = (containerWidth - newDisplayedWidth) / 2;
     }
     
-    console.log('[VideoRegionSelector] Video Loaded. Native Dims:', {videoNativeWidth, videoNativeHeight}, 'Container Dims:', {containerWidth, containerHeight}, 'Calculated Display Metrics:', {newDisplayedWidth, newDisplayedHeight, newOffsetX, newOffsetY});
+    console.log('[VideoRegionSelector] Video Loaded. Native Dims (from props):', {videoNativeWidth, videoNativeHeight}, 'Container Dims (16:9 box):', {containerWidth, containerHeight}, 'VideoAR:', videoActualAspectRatio, 'ContainerAR:', containerAspectRatio, 'Calculated Display Metrics:', {newDisplayedWidth, newDisplayedHeight, newOffsetX, newOffsetY});
 
     setDisplayedVideoMetrics({
       width: newDisplayedWidth,
@@ -107,11 +113,10 @@ export function VideoRegionSelector({
       offsetX: newOffsetX,
       offsetY: newOffsetY,
     });
-  }, []);
+  }, [originalVideoWidth, originalVideoHeight]); // Depend on originalVideoWidth/Height from props
 
 
   const getRelativeCoords = (clientX: number, clientY: number) => {
-    // Calculates coordinates relative to the overlayRef, which is now positioned over the active video area.
     if (!overlayRef.current) return { x: 0, y: 0, valid: false };
     const rect = overlayRef.current.getBoundingClientRect();
     
@@ -159,7 +164,7 @@ export function VideoRegionSelector({
     }
 
     if (!originalVideoWidth || !originalVideoHeight || originalVideoWidth <= 0 || originalVideoHeight <= 0) {
-        console.error('[VideoRegionSelector] MouseUp: Aborting, original video dimensions are invalid or missing.', { originalVideoWidth, originalVideoHeight });
+        console.error('[VideoRegionSelector] MouseUp: Aborting, original video dimensions (from props) are invalid or missing.', { originalVideoWidth, originalVideoHeight });
         setIsDrawing(false);
         setSelection(null); setStartPoint(null); setEndPoint(null);
         return;
@@ -167,7 +172,13 @@ export function VideoRegionSelector({
     
     const { width: displayedContentWidth, height: displayedContentHeight } = displayedVideoMetrics;
 
-    // Ensure points are within the bounds of the active video overlay
+    if (displayedContentWidth <= 0 || displayedContentHeight <= 0) {
+        console.error('[VideoRegionSelector] MouseUp: Aborting, displayed content dimensions are invalid.', { displayedContentWidth, displayedContentHeight });
+        setIsDrawing(false);
+        setSelection(null); setStartPoint(null); setEndPoint(null);
+        return;
+    }
+
     const boundedStartX = Math.max(0, Math.min(startPoint.x, displayedContentWidth));
     const boundedStartY = Math.max(0, Math.min(startPoint.y, displayedContentHeight));
     const boundedEndX = Math.max(0, Math.min(endPoint.x, displayedContentWidth));
@@ -187,7 +198,7 @@ export function VideoRegionSelector({
 
     const scaleX = originalVideoWidth / displayedContentWidth;
     const scaleY = originalVideoHeight / displayedContentHeight;
-    console.log('[VideoRegionSelector] MouseUp: Scaling factors (original/displayedContent):', { scaleX, scaleY });
+    console.log('[VideoRegionSelector] MouseUp: Scaling factors (originalVideoDim / displayedContentDim):', { scaleX, scaleY });
 
     const finalCoords: SelectionCoordinates = {
       x1: Math.round(x1_on_overlay * scaleX),
@@ -227,8 +238,7 @@ export function VideoRegionSelector({
   };
 
   const currentSelectionStyle: React.CSSProperties = {};
-  if (startPoint && endPoint && displayedVideoMetrics) {
-    // These are relative to the overlayRef (active video area)
+  if (startPoint && endPoint && displayedVideoMetrics && Math.abs(endPoint.x - startPoint.x) > 0 && Math.abs(endPoint.y - startPoint.y) > 0) {
     currentSelectionStyle.left = `${Math.min(startPoint.x, endPoint.x)}px`;
     currentSelectionStyle.top = `${Math.min(startPoint.y, endPoint.y)}px`;
     currentSelectionStyle.width = `${Math.abs(endPoint.x - startPoint.x)}px`;
@@ -255,37 +265,35 @@ export function VideoRegionSelector({
         </DialogHeader>
         
         <div className="py-4 bg-muted flex items-center justify-center">
-          {/* Outer container with fixed aspect ratio (e.g., 16:9 using Tailwind's aspect-video) */}
           <div 
             ref={fixedAspectContainerRef}
             className="relative w-full max-w-[70vw] sm:max-w-[60vw] md:max-w-xl lg:max-w-2xl aspect-video bg-black overflow-hidden"
+            // style={{ outline: '2px solid red' }} // Debug outline for 16:9 container
           >
             {videoSrc && originalVideoWidth && originalVideoHeight ? (
               <>
-                {/* VideoPlayer fills the fixed aspect container; object-contain handles letterboxing */}
                 <VideoPlayer 
                   src={videoSrc} 
-                  className="absolute top-0 left-0 w-full h-full" // Player fills the 16:9 box
+                  className="absolute top-0 left-0 w-full h-full" 
                   onLoadedMetadata={handleVideoLoad} 
                 />
-                {/* Overlay for drawing, dynamically positioned over the visible video content */}
                 {displayedVideoMetrics ? (
                   <div
                     ref={overlayRef}
-                    className="absolute cursor-crosshair z-10" // Will capture mouse events
+                    className="absolute cursor-crosshair z-10" 
                     style={{
                       width: `${displayedVideoMetrics.width}px`,
                       height: `${displayedVideoMetrics.height}px`,
                       top: `${displayedVideoMetrics.offsetY}px`,
                       left: `${displayedVideoMetrics.offsetX}px`,
+                      // outline: '2px dashed limegreen', // Debug outline for active video area overlay
                     }}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={() => { if(isDrawing) handleMouseUp(); }} 
                   >
-                    {/* Selection rectangle, drawn relative to this overlayRef */}
-                    {startPoint && endPoint && Math.abs(endPoint.x - startPoint.x) > 0 && Math.abs(endPoint.y - startPoint.y) > 0 && (
+                    {startPoint && endPoint && Object.keys(currentSelectionStyle).length > 0 && (
                       <div
                         className="absolute border-2 border-dashed border-yellow-400 bg-yellow-400 bg-opacity-20 pointer-events-none"
                         style={currentSelectionStyle}
@@ -295,7 +303,7 @@ export function VideoRegionSelector({
                 ) : (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-black/70 pointer-events-none z-20">
                         <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                        <p className="text-sm">Loading video preview & calculating dimensions...</p>
+                        <p className="text-sm">Loading video & calculating dimensions...</p>
                     </div>
                 )}
               </>
