@@ -5,13 +5,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import type { SelectionCoordinates } from '@/lib/types';
-import { VideoPlayer } from './video-player'; // Assuming this can play the src
+import { VideoPlayer } from './video-player';
 import { Crop } from 'lucide-react';
 
 interface VideoRegionSelectorProps {
   isOpen: boolean;
   onClose: () => void;
-  videoSrc?: string; // Blob URL or direct URL of the original video for preview
+  videoSrc?: string;
   originalVideoWidth?: number;
   originalVideoHeight?: number;
   onConfirm: (coordinates: SelectionCoordinates) => void;
@@ -33,46 +33,88 @@ export function VideoRegionSelector({
   const [selection, setSelection] = useState<SelectionCoordinates | null>(null);
   
   const overlayRef = useRef<HTMLDivElement>(null);
-  const videoPlayerRef = useRef<HTMLVideoElement>(null); // Ref for the actual video element inside VideoPlayer
 
-  // This effect is to get a ref to the actual video element if VideoPlayer forwards it
-  // If VideoPlayer doesn't forward a ref, this approach needs adjustment.
-  // For now, we assume VideoPlayer's inner video tag might be accessible.
-  // If not, we'll rely on originalVideoWidth/Height for scaling.
+  useEffect(() => {
+    if (isOpen) {
+      console.log('[VideoRegionSelector] Dialog opened. Resetting state. Original Dims:', { originalVideoWidth, originalVideoHeight });
+      setIsDrawing(false);
+      setStartPoint(null);
+      setEndPoint(null);
+      setSelection(null);
+    }
+  }, [isOpen, originalVideoWidth, originalVideoHeight]); // Added originalVideoWidth/Height here to log them on open
 
   const getRelativeCoords = (clientX: number, clientY: number) => {
-    if (!overlayRef.current) return { x: 0, y: 0 };
+    if (!overlayRef.current) return { x: 0, y: 0, valid: false };
     const rect = overlayRef.current.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+        console.warn('[VideoRegionSelector] Overlay dimensions are zero.');
+        return { x: 0, y: 0, valid: false };
+    }
     return {
       x: clientX - rect.left,
       y: clientY - rect.top,
+      valid: true
     };
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!overlayRef.current) return;
-    const { x, y } = getRelativeCoords(event.clientX, event.clientY);
+    const { x, y, valid } = getRelativeCoords(event.clientX, event.clientY);
+    if (!valid) return;
+
+    console.log('[VideoRegionSelector] MouseDown at (display):', { x, y });
     setIsDrawing(true);
     setStartPoint({ x, y });
-    setEndPoint({ x, y }); // Reset endpoint
-    setSelection(null);
+    setEndPoint({ x, y }); 
+    setSelection(null); // Reset previous final selection
   };
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isDrawing || !startPoint || !overlayRef.current) return;
-    const { x, y } = getRelativeCoords(event.clientX, event.clientY);
+    const { x, y, valid } = getRelativeCoords(event.clientX, event.clientY);
+    if (!valid) return;
+
+    // console.log('[VideoRegionSelector] MouseMove to (display):', { x, y }); // Can be too noisy
     setEndPoint({ x, y });
   };
 
   const handleMouseUp = () => {
-    if (!isDrawing || !startPoint || !endPoint || !overlayRef.current || !originalVideoWidth || !originalVideoHeight) {
+    console.log('[VideoRegionSelector] MouseUp triggered.');
+    if (!isDrawing || !startPoint || !endPoint || !overlayRef.current) {
+      console.log('[VideoRegionSelector] MouseUp: Aborting, not drawing or missing refs/points.', { isDrawing, startPoint, endPoint, overlayRefExists: !!overlayRef.current });
       setIsDrawing(false);
       return;
     }
 
+    console.log('[VideoRegionSelector] MouseUp: current startPoint (display):', startPoint);
+    console.log('[VideoRegionSelector] MouseUp: current endPoint (display):', endPoint);
+
+    if (!originalVideoWidth || !originalVideoHeight || originalVideoWidth === 0 || originalVideoHeight === 0) {
+        console.error('[VideoRegionSelector] MouseUp: Aborting, original video dimensions are invalid or missing.', { originalVideoWidth, originalVideoHeight });
+        setIsDrawing(false);
+        setSelection(null);
+        setStartPoint(null);
+        setEndPoint(null);
+        // Optionally, show a toast to the user here
+        return;
+    }
+    
     const overlayRect = overlayRef.current.getBoundingClientRect();
     const displayedVideoWidth = overlayRect.width;
     const displayedVideoHeight = overlayRect.height;
+
+    if (displayedVideoWidth === 0 || displayedVideoHeight === 0) {
+        console.error('[VideoRegionSelector] MouseUp: Aborting, displayed video dimensions are zero.');
+        setIsDrawing(false);
+        setSelection(null);
+        setStartPoint(null);
+        setEndPoint(null);
+        return;
+    }
+
+    console.log('[VideoRegionSelector] MouseUp: Displayed Dims:', { displayedVideoWidth, displayedVideoHeight });
+    console.log('[VideoRegionSelector] MouseUp: Original Dims:', { originalVideoWidth, originalVideoHeight });
 
     // Ensure points are within bounds of the displayed video
     const boundedStartX = Math.max(0, Math.min(startPoint.x, displayedVideoWidth));
@@ -80,14 +122,28 @@ export function VideoRegionSelector({
     const boundedEndX = Math.max(0, Math.min(endPoint.x, displayedVideoWidth));
     const boundedEndY = Math.max(0, Math.min(endPoint.y, displayedVideoHeight));
     
+    console.log('[VideoRegionSelector] MouseUp: Bounded Points (display):', { boundedStartX, boundedStartY, boundedEndX, boundedEndY });
+
     const x1_display = Math.min(boundedStartX, boundedEndX);
     const y1_display = Math.min(boundedStartY, boundedEndY);
     const x2_display = Math.max(boundedStartX, boundedEndX);
     const y2_display = Math.max(boundedStartY, boundedEndY);
 
-    // Scale coordinates to original video dimensions
+    console.log('[VideoRegionSelector] MouseUp: Ordered Display Coords:', { x1_display, y1_display, x2_display, y2_display });
+
+    // Check for zero-area selection on display before scaling
+    if (x1_display >= x2_display || y1_display >= y2_display) {
+        console.warn("[VideoRegionSelector] MouseUp: Selection resulted in zero or negative width/height on display. Resetting selection.");
+        setSelection(null);
+        setStartPoint(null);
+        setEndPoint(null);
+        setIsDrawing(false);
+        return;
+    }
+
     const scaleX = originalVideoWidth / displayedVideoWidth;
     const scaleY = originalVideoHeight / displayedVideoHeight;
+    console.log('[VideoRegionSelector] MouseUp: Scaling factors:', { scaleX, scaleY });
 
     const finalCoords: SelectionCoordinates = {
       x1: Math.round(x1_display * scaleX),
@@ -95,50 +151,36 @@ export function VideoRegionSelector({
       x2: Math.round(x2_display * scaleX),
       y2: Math.round(y2_display * scaleY),
     };
+    console.log('[VideoRegionSelector] MouseUp: Final Coords (scaled & rounded):', finalCoords);
     
     // Ensure x1 < x2 and y1 < y2 after scaling and rounding
     if (finalCoords.x1 >= finalCoords.x2 || finalCoords.y1 >= finalCoords.y2) {
-        console.warn("Selection resulted in zero or negative width/height after scaling. Resetting.");
+        console.warn("[VideoRegionSelector] MouseUp: Selection resulted in zero or negative width/height after scaling. Resetting selection.");
         setSelection(null);
-        setStartPoint(null);
-        setEndPoint(null);
+        // Keep startPoint and endPoint for visual feedback of the drawn box, but selection is invalid for confirm
     } else {
         setSelection(finalCoords);
-        console.log("Selection made (display coords):", { x1_display, y1_display, x2_display, y2_display });
-        console.log("Scaled to original (final coords):", finalCoords);
+        console.log("[VideoRegionSelector] MouseUp: Successfully set selection (final scaled coords):", finalCoords);
     }
     setIsDrawing(false);
   };
   
-  useEffect(() => {
-    // Reset state when dialog is closed/opened
-    if (isOpen) {
-      setIsDrawing(false);
-      setStartPoint(null);
-      setEndPoint(null);
-      setSelection(null);
-    }
-  }, [isOpen]);
-
-
   const handleConfirm = () => {
     if (selection && originalVideoWidth && originalVideoHeight) {
-        // Ensure coordinates are within the original video bounds just in case
         const confirmedSelection = {
             x1: Math.max(0, Math.min(selection.x1, originalVideoWidth)),
             y1: Math.max(0, Math.min(selection.y1, originalVideoHeight)),
             x2: Math.max(0, Math.min(selection.x2, originalVideoWidth)),
             y2: Math.max(0, Math.min(selection.y2, originalVideoHeight)),
         };
-        // Ensure x1 < x2 and y1 < y2 again
         if (confirmedSelection.x1 < confirmedSelection.x2 && confirmedSelection.y1 < confirmedSelection.y2) {
+            console.log('[VideoRegionSelector] Confirming selection:', confirmedSelection);
             onConfirm(confirmedSelection);
         } else {
-            console.error("Invalid selection for confirmation (zero width/height).");
-            // Optionally, add a toast message here
+            console.error("[VideoRegionSelector] Invalid selection for confirmation (zero width/height). Should not happen if button enabled.", confirmedSelection);
         }
     } else {
-        console.error("No valid selection to confirm or missing video dimensions.");
+        console.error("[VideoRegionSelector] No valid selection to confirm or missing video dimensions.");
     }
   };
 
@@ -150,6 +192,12 @@ export function VideoRegionSelector({
     currentSelectionStyle.height = `${Math.abs(endPoint.y - startPoint.y)}px`;
   }
   
+  // Log selection state on re-render to see if it's being updated
+  // console.log('[VideoRegionSelector] Render: current selection state:', selection);
+
+  const isConfirmDisabled = !selection || (selection.x1 >= selection.x2 || selection.y1 >= selection.y2);
+  // console.log('[VideoRegionSelector] Render: isConfirmDisabled:', isConfirmDisabled, 'Selection:', selection);
+
   if (!isOpen) return null;
 
   return (
@@ -163,24 +211,22 @@ export function VideoRegionSelector({
           <DialogDescription>
             Click and drag on the video to select the area you want to process.
             The coordinates will be scaled to the original video dimensions.
+            Original Dimensions: {originalVideoWidth && originalVideoHeight ? `${originalVideoWidth}x${originalVideoHeight}px` : 'Not available'}
           </DialogDescription>
         </DialogHeader>
         
         <div className="py-4 relative aspect-video bg-muted flex items-center justify-center">
-          {videoSrc ? (
+          {videoSrc && originalVideoWidth && originalVideoHeight ? (
             <div
               ref={overlayRef}
-              className="absolute inset-0 cursor-crosshair z-10"
+              className="absolute inset-0 cursor-crosshair z-10 w-full h-full" // Ensure overlay covers the video player area
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
-              onMouseLeave={() => { if(isDrawing) handleMouseUp(); }} // Finalize if mouse leaves while drawing
+              onMouseLeave={() => { if(isDrawing) handleMouseUp(); }} 
             >
-              {/* Video player sits behind the overlay */}
               <VideoPlayer src={videoSrc} className="w-full h-full pointer-events-none" />
-
-              {/* Drawn selection rectangle */}
-              {isDrawing && startPoint && endPoint && (
+              {startPoint && endPoint && Math.abs(endPoint.x - startPoint.x) > 0 && Math.abs(endPoint.y - startPoint.y) > 0 && (
                 <div
                   className="absolute border-2 border-dashed border-yellow-400 bg-yellow-400 bg-opacity-20 pointer-events-none"
                   style={currentSelectionStyle}
@@ -188,13 +234,16 @@ export function VideoRegionSelector({
               )}
             </div>
           ) : (
-            <p>Video preview unavailable.</p>
+            <p className="text-destructive">
+              Video preview or original dimensions unavailable. Cannot select region. 
+              (Src: {videoSrc ? 'Available' : 'Missing'}, Width: {originalVideoWidth}, Height: {originalVideoHeight})
+            </p>
           )}
         </div>
         
         {selection && (
           <div className="text-sm p-2 bg-secondary rounded-md">
-            Selected (scaled): x1: {selection.x1}, y1: {selection.y1}, x2: {selection.x2}, y2: {selection.y2}
+            Selected (scaled to original video): x1: {selection.x1}, y1: {selection.y1}, x2: {selection.x2}, y2: {selection.y2}
           </div>
         )}
 
@@ -208,7 +257,7 @@ export function VideoRegionSelector({
             type="button"
             className="!bg-primary hover:!bg-primary/90 text-primary-foreground"
             onClick={handleConfirm}
-            disabled={!selection || (selection.x1 === selection.x2 || selection.y1 === selection.y2)}
+            disabled={isConfirmDisabled}
           >
             Confirm Selection & Process
           </Button>
