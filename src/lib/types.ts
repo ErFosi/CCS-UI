@@ -1,9 +1,9 @@
 
 export interface VideoAsset {
-  id: string;
-  name: string;
-  filename: string; // Actual filename for API calls (original)
-  originalUrl?: string; // Full URL for original video streaming/download
+  id: string; // Should be unique, e.g., S3 key or UUID
+  name: string; // User-friendly display name
+  filename: string; // Actual filename used for API calls (original video)
+  originalUrl?: string; // Full URL for original video streaming/download (e.g., from FastAPI GET /videos/{filename})
   censoredUrl?: string; // Full URL for censored video, updated after processing
   processedFilename?: string; // Filename of the processed/censored video
   uploadDate?: string; // ISO string
@@ -22,8 +22,13 @@ export interface ProcessVideoApiResponse {
 
 // Defines the structure of user preferences fetched from AND sent to the API
 export interface UserPreference {
-  darkTheme?: boolean; // Changed from theme: 'light' | 'dark'
+  darkTheme?: boolean;
   // Add other preference fields here if your API handles them
-  // e.g., videoQuality?: 'auto' | '720p' | '1080p';
-  // e.g., notificationsEnabled?: boolean;
+}
+
+export interface SelectionCoordinates {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 }
