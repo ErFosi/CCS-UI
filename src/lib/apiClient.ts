@@ -2,16 +2,18 @@
 // Client-side API client
 import type { VideoAsset, ProcessVideoApiResponse, UserPreference, SelectionCoordinates } from '@/lib/types';
 
+// This function reads the environment variable and should be used by all API call functions.
 export const getApiBaseUrl = (): string => {
   const apiUrlFromEnv = process.env.NEXT_PUBLIC_FASTAPI_URL;
   if (!apiUrlFromEnv) {
-    const defaultUrl = "http://localhost:8000"; // Fallback for safety
+    const defaultUrl = "http://localhost:8000"; // Fallback for safety in case env var is missing
     console.warn(
       `[API_CLIENT - BROWSER] WARN: NEXT_PUBLIC_FASTAPI_URL is not defined. Using default: ${defaultUrl}. This may not be correct.`
     );
     return defaultUrl;
   }
-  // console.log(`[API_CLIENT - BROWSER] Using API Base URL: ${apiUrlFromEnv}`);
+  // Log the base URL being used to help confirm it's from the .env
+  console.log(`[API_CLIENT - BROWSER] Using API Base URL from .env: ${apiUrlFromEnv}`);
   return apiUrlFromEnv;
 };
 
@@ -25,7 +27,7 @@ async function fetchWithAuth<T = any>(
   path: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const apiUrl = getApiBaseUrl();
+  const apiUrl = getApiBaseUrl(); // Ensures we use the env variable
   const fullUrl = `${apiUrl}${path}`;
   const headers = new Headers(options.headers || {});
 
@@ -33,53 +35,50 @@ async function fetchWithAuth<T = any>(
     headers.append('Authorization', `Bearer ${options.token}`);
   }
 
-  // Content-Type for FormData is set automatically by the browser, including the boundary.
-  // For JSON, we set it explicitly.
   if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.append('Content-Type', 'application/json');
   }
   
   console.log(`[API_CLIENT - BROWSER] Making ${options.method || 'GET'} request to: ${fullUrl}`);
-  if (options.body instanceof FormData) {
-    // console.log("[API_CLIENT - BROWSER] Request body is FormData. Content-Type will be set by browser.");
-    // For FormData, log entries for debugging
-    // for (let [key, value] of (options.body as FormData).entries()) {
-    //   if (value instanceof File) {
-    //     console.log(`[API_CLIENT - BROWSER] FormData field: ${key} = File { name: ${value.name}, size: ${value.size}, type: ${value.type} }`);
-    //   } else {
-    //     console.log(`[API_CLIENT - BROWSER] FormData field: ${key} = ${value}`);
-    //   }
-    // }
-  } else if (options.body) {
-    // console.log("[API_CLIENT - BROWSER] Request body (JSON/Text):", options.body);
+
+  let response;
+  try {
+    response = await fetch(fullUrl, {
+      ...options,
+      headers,
+    });
+  } catch (networkError: any) {
+    // This catches low-level network errors (e.g., server down, DNS issues, SSL issues before HTTP response)
+    console.error(`[API_CLIENT - BROWSER] Network error trying to reach ${fullUrl}:`, networkError);
+    throw new Error(`Network error trying to reach ${fullUrl}: ${networkError.message}. Check if the API server is running, accessible, and CORS/SSL configured.`);
   }
 
 
-  const response = await fetch(fullUrl, {
-    ...options,
-    headers,
-  });
-
   if (!response.ok) {
     let errorData: any = {};
-    let errorMessageText = `Request failed with status ${response.status} ${response.statusText || '(Unknown Error)'}`;
+    let errorMessageText = `Request to ${fullUrl} failed with status ${response.status} ${response.statusText || ''}`.trim();
     try {
-      // Try to parse as JSON, but fallback if it's not JSON
       const responseText = await response.text();
       if (responseText) {
         try {
           errorData = JSON.parse(responseText);
-          errorMessageText = errorData?.detail || errorData?.message || errorMessageText;
+          // Use detailed message from backend if available
+          if (errorData.detail) {
+            errorMessageText = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
+          } else if (errorData.message) {
+            errorMessageText = errorData.message;
+          } else {
+            errorMessageText = responseText.length < 200 ? responseText : errorMessageText; // Use short raw text if no detail/message
+          }
         } catch (parseError) {
-          // If parsing fails, use the raw text as the message if it's short enough
-          errorMessageText = responseText.length < 100 ? responseText : errorMessageText;
+          errorMessageText = responseText.length < 200 ? responseText : errorMessageText;
           console.warn(`[API_CLIENT - BROWSER] Could not parse error response as JSON for ${path}. Status: ${response.status}. Raw response: ${responseText}`);
         }
       }
     } catch (e) {
-      // Ignore error during error text parsing
+      // Ignore error during error text parsing, keep the original status-based message
     }
-    console.error(`[API_CLIENT - BROWSER] API Error ${response.status} for ${path}:`, errorData);
+    console.error(`[API_CLIENT - BROWSER] API Error ${response.status} for ${path}:`, errorData.detail || errorData.message || errorData);
     const error = new Error(errorMessageText) as any;
     error.response = response; 
     error.data = errorData; 
@@ -87,13 +86,12 @@ async function fetchWithAuth<T = any>(
   }
 
   const contentType = response.headers.get("content-type");
-  // Default to 'json' if content type suggests it, otherwise 'text', allow override by options.responseType
   let effectiveResponseType = options.responseType;
   if (!effectiveResponseType) {
     if (contentType && contentType.includes("application/json")) {
       effectiveResponseType = 'json';
-    } else if (contentType && contentType.startsWith("video/") || contentType && contentType.startsWith("image/") || contentType && contentType.includes("octet-stream")) {
-      effectiveResponseType = 'blob'; // Smart default for media types
+    } else if (contentType && (contentType.startsWith("video/") || contentType.startsWith("image/") || contentType.includes("octet-stream"))) {
+      effectiveResponseType = 'blob';
     } else {
       effectiveResponseType = 'text';
     }
@@ -114,13 +112,13 @@ async function fetchWithAuth<T = any>(
   return response.text() as Promise<T>;
 }
 
-// Expects API to return a list of objects, maps to VideoAsset[] in context
-export async function listVideosApi(token: string): Promise<any[]> { 
+export async function listVideosApi(token: string): Promise<VideoAsset[]> { 
   console.log("[API_CLIENT - BROWSER] listVideosApi called");
-  return fetchWithAuth<any[]>('/videos', { token, method: 'GET', responseType: 'json' });
+  // Assuming your API returns objects that can be directly cast to VideoAsset[]
+  // If not, you might need to map the result here or in VideoContext
+  return fetchWithAuth<VideoAsset[]>('/videos', { token, method: 'GET', responseType: 'json' });
 }
 
-// Expects API to return a VideoAsset-like object
 export async function uploadVideoApi(formData: FormData, token: string): Promise<VideoAsset> {
   console.log("[API_CLIENT - BROWSER] uploadVideoApi called");
   return fetchWithAuth<VideoAsset>('/upload', {
@@ -149,15 +147,12 @@ export async function processVideoApi(
   console.log(`[API_CLIENT - BROWSER] processVideoApi called for filename: ${filename} with coordinates:`, coordinates);
   
   const formData = new FormData();
-  formData.append('filename', filename); // Send filename as a string
+  // Backend expects 'filename' as a string for already uploaded files on S3.
+  formData.append('filename', filename); 
   formData.append('x1', coordinates.x1.toString());
   formData.append('y1', coordinates.y1.toString());
   formData.append('x2', coordinates.x2.toString());
   formData.append('y2', coordinates.y2.toString());
-  // Note: We are NOT sending the file again. The backend should use the 'filename'
-  // to retrieve the already uploaded file from S3 for processing.
-  // If your backend *requires* the file in this request (matching your curl's -F file=@...),
-  // this frontend logic would need a way to re-access the original File object, which is complex.
 
   return fetchWithAuth<ProcessVideoApiResponse>('/process', {
     method: 'POST',
@@ -198,9 +193,9 @@ export async function getPreferenceApi(token: string): Promise<UserPreference> {
 export async function setPreferenceApi(
   payload: UserPreference,
   token: string
-): Promise<void> { 
+): Promise<UserPreference> { 
   console.log("[API_CLIENT - BROWSER] setPreferenceApi called with payload:", payload);
-  await fetchWithAuth<any>('/preferences', { 
+  return fetchWithAuth<UserPreference>('/preferences', { 
     method: 'POST',
     body: JSON.stringify(payload),
     token,
