@@ -1,16 +1,16 @@
 
-"use client"; 
+"use client";
 
-import { Inter } from 'next/font/google'; 
+import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { VideoProvider } from '@/context/video-context';
 import { ThemeProvider } from '@/context/theme-context';
-import { AuthProvider } from '@/context/auth-context'; // Import AuthProvider
+import { AuthProvider } from '@/context/auth-context';
 
 const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-geist-sans', 
+  variable: '--font-geist-sans',
 });
 
 
@@ -20,16 +20,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning> 
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <AuthProvider> {/* AuthProvider now wraps ThemeProvider */}
-          <ThemeProvider>
+        <ThemeProvider> {/* ThemeProvider now wraps AuthProvider */}
+          <AuthProvider>
             <VideoProvider>
               {children}
               <Toaster />
             </VideoProvider>
-          </ThemeProvider>
-        </AuthProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
