@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Button } from '@/components/ui/button';
 import type { SelectionCoordinates } from '@/lib/types';
 import { VideoPlayer } from './video-player';
-import { Crop } from 'lucide-react';
+import { Crop, Loader2 } from 'lucide-react';
 
 interface VideoRegionSelectorProps {
   isOpen: boolean;
@@ -32,27 +32,91 @@ export function VideoRegionSelector({
   const [endPoint, setEndPoint] = useState<{ x: number; y: number } | null>(null);
   const [selection, setSelection] = useState<SelectionCoordinates | null>(null);
   
-  const overlayRef = useRef<HTMLDivElement>(null);
+  const [displayedVideoMetrics, setDisplayedVideoMetrics] = useState<{
+    width: number;  // width of video content as displayed
+    height: number; // height of video content as displayed
+    offsetX: number; // X offset of video content within the fixed-aspect container
+    offsetY: number; // Y offset of video content within the fixed-aspect container
+  } | null>(null);
 
-  const videoAspectRatio = originalVideoWidth && originalVideoHeight && originalVideoHeight > 0 
-    ? originalVideoWidth / originalVideoHeight 
-    : 16 / 9; // Default to 16:9 if dims not available or invalid to prevent division by zero
+  const fixedAspectContainerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      console.log('[VideoRegionSelector] Dialog opened. Resetting state. Original Dims:', { originalVideoWidth, originalVideoHeight }, "Aspect Ratio:", videoAspectRatio);
+      console.log('[VideoRegionSelector] Dialog opened. Resetting state. Original Dims:', { originalVideoWidth, originalVideoHeight });
       setIsDrawing(false);
       setStartPoint(null);
       setEndPoint(null);
       setSelection(null);
+      setDisplayedVideoMetrics(null); // Reset video metrics
     }
-  }, [isOpen, originalVideoWidth, originalVideoHeight, videoAspectRatio]);
+  }, [isOpen, originalVideoWidth, originalVideoHeight]);
+
+  const handleVideoLoad = useCallback((event: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    if (!fixedAspectContainerRef.current) {
+        console.warn('[VideoRegionSelector] handleVideoLoad: fixedAspectContainerRef not available.');
+        setDisplayedVideoMetrics(null);
+        return;
+    }
+
+    const videoElement = event.currentTarget;
+    const videoNativeWidth = videoElement.videoWidth;
+    const videoNativeHeight = videoElement.videoHeight;
+
+    if (videoNativeWidth === 0 || videoNativeHeight === 0) {
+      console.warn('[VideoRegionSelector] Video metadata loaded with 0x0 dimensions.');
+      setDisplayedVideoMetrics(null);
+      return;
+    }
+
+    const containerRect = fixedAspectContainerRef.current.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    const containerHeight = containerRect.height;
+
+    if (containerWidth === 0 || containerHeight === 0) {
+      console.warn('[VideoRegionSelector] Fixed aspect container has 0x0 dimensions.');
+      setDisplayedVideoMetrics(null);
+      return;
+    }
+
+    const videoActualAspectRatio = videoNativeWidth / videoNativeHeight;
+    const containerAspectRatio = containerWidth / containerHeight;
+
+    let newDisplayedWidth, newDisplayedHeight, newOffsetX, newOffsetY;
+
+    if (videoActualAspectRatio > containerAspectRatio) {
+      // Video is wider than container (letterboxed top/bottom if container is taller, or fits width perfectly)
+      newDisplayedWidth = containerWidth;
+      newDisplayedHeight = containerWidth / videoActualAspectRatio;
+      newOffsetX = 0;
+      newOffsetY = (containerHeight - newDisplayedHeight) / 2;
+    } else {
+      // Video is taller than container or same aspect ratio (pillarboxed left/right if container is wider, or fits height perfectly)
+      newDisplayedHeight = containerHeight;
+      newDisplayedWidth = containerHeight * videoActualAspectRatio;
+      newOffsetY = 0;
+      newOffsetX = (containerWidth - newDisplayedWidth) / 2;
+    }
+    
+    console.log('[VideoRegionSelector] Video Loaded. Native Dims:', {videoNativeWidth, videoNativeHeight}, 'Container Dims:', {containerWidth, containerHeight}, 'Calculated Display Metrics:', {newDisplayedWidth, newDisplayedHeight, newOffsetX, newOffsetY});
+
+    setDisplayedVideoMetrics({
+      width: newDisplayedWidth,
+      height: newDisplayedHeight,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY,
+    });
+  }, []);
+
 
   const getRelativeCoords = (clientX: number, clientY: number) => {
+    // Calculates coordinates relative to the overlayRef, which is now positioned over the active video area.
     if (!overlayRef.current) return { x: 0, y: 0, valid: false };
     const rect = overlayRef.current.getBoundingClientRect();
+    
     if (rect.width === 0 || rect.height === 0) {
-        console.warn('[VideoRegionSelector] Overlay dimensions are zero during getRelativeCoords.');
+        console.warn('[VideoRegionSelector] Overlay (active video area) dimensions are zero during getRelativeCoords.');
         return { x: 0, y: 0, valid: false };
     }
     return {
@@ -63,13 +127,16 @@ export function VideoRegionSelector({
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!overlayRef.current) return;
+    if (!displayedVideoMetrics) {
+        console.warn("[VideoRegionSelector] MouseDown: displayedVideoMetrics not ready. Cannot start drawing.");
+        return;
+    }
     const { x, y, valid } = getRelativeCoords(event.clientX, event.clientY);
     if (!valid) {
       console.warn("[VideoRegionSelector] MouseDown: Invalid relative coords.");
       return;
     }
-    console.log('[VideoRegionSelector] MouseDown at (display):', { x, y });
+    console.log('[VideoRegionSelector] MouseDown on active overlay at (coords relative to overlay):', { x, y });
     setIsDrawing(true);
     setStartPoint({ x, y });
     setEndPoint({ x, y }); 
@@ -77,16 +144,16 @@ export function VideoRegionSelector({
   };
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDrawing || !startPoint || !overlayRef.current) return;
+    if (!isDrawing || !startPoint || !overlayRef.current || !displayedVideoMetrics) return;
     const { x, y, valid } = getRelativeCoords(event.clientX, event.clientY);
     if (!valid) return;
     setEndPoint({ x, y });
   };
-
+  
   const handleMouseUp = () => {
     console.log('[VideoRegionSelector] MouseUp triggered.');
-    if (!isDrawing || !startPoint || !endPoint || !overlayRef.current) {
-      console.log('[VideoRegionSelector] MouseUp: Aborting, not drawing or missing refs/points.', { isDrawing, startPoint, endPoint, overlayRefExists: !!overlayRef.current });
+    if (!isDrawing || !startPoint || !endPoint || !overlayRef.current || !displayedVideoMetrics) {
+      console.log('[VideoRegionSelector] MouseUp: Aborting, not drawing or missing refs/video metrics.', { isDrawing, startPoint, endPoint, overlayRefExists: !!overlayRef.current, displayedVideoMetrics });
       setIsDrawing(false);
       return;
     }
@@ -98,48 +165,37 @@ export function VideoRegionSelector({
         return;
     }
     
-    const overlayRect = overlayRef.current.getBoundingClientRect();
-    const displayedVideoWidth = overlayRect.width;
-    const displayedVideoHeight = overlayRect.height;
+    const { width: displayedContentWidth, height: displayedContentHeight } = displayedVideoMetrics;
 
-    if (displayedVideoWidth <= 0 || displayedVideoHeight <= 0) {
-        console.error('[VideoRegionSelector] MouseUp: Aborting, displayed video dimensions are zero or invalid from overlayRef.', { displayedVideoWidth, displayedVideoHeight });
-        setIsDrawing(false);
-        setSelection(null); setStartPoint(null); setEndPoint(null);
-        return;
-    }
+    // Ensure points are within the bounds of the active video overlay
+    const boundedStartX = Math.max(0, Math.min(startPoint.x, displayedContentWidth));
+    const boundedStartY = Math.max(0, Math.min(startPoint.y, displayedContentHeight));
+    const boundedEndX = Math.max(0, Math.min(endPoint.x, displayedContentWidth));
+    const boundedEndY = Math.max(0, Math.min(endPoint.y, displayedContentHeight));
     
-    console.log('[VideoRegionSelector] MouseUp: Displayed Dims (from overlayRef):', { displayedVideoWidth, displayedVideoHeight });
-    console.log('[VideoRegionSelector] MouseUp: Original Video Dims:', { originalVideoWidth, originalVideoHeight });
+    const x1_on_overlay = Math.min(boundedStartX, boundedEndX);
+    const y1_on_overlay = Math.min(boundedStartY, boundedEndY);
+    const x2_on_overlay = Math.max(boundedStartX, boundedEndX);
+    const y2_on_overlay = Math.max(boundedStartY, boundedEndY);
 
-    const boundedStartX = Math.max(0, Math.min(startPoint.x, displayedVideoWidth));
-    const boundedStartY = Math.max(0, Math.min(startPoint.y, displayedVideoHeight));
-    const boundedEndX = Math.max(0, Math.min(endPoint.x, displayedVideoWidth));
-    const boundedEndY = Math.max(0, Math.min(endPoint.y, displayedVideoHeight));
-    
-    const x1_display = Math.min(boundedStartX, boundedEndX);
-    const y1_display = Math.min(boundedStartY, boundedEndY);
-    const x2_display = Math.max(boundedStartX, boundedEndX);
-    const y2_display = Math.max(boundedStartY, boundedEndY);
-
-    if (x1_display >= x2_display || y1_display >= y2_display) {
-        console.warn("[VideoRegionSelector] MouseUp: Selection resulted in zero or negative width/height on display. Resetting selection.");
+    if (x1_on_overlay >= x2_on_overlay || y1_on_overlay >= y2_on_overlay) {
+        console.warn("[VideoRegionSelector] MouseUp: Selection on active overlay resulted in zero or negative width/height. Resetting selection.");
         setSelection(null); setStartPoint(null); setEndPoint(null);
         setIsDrawing(false);
         return;
     }
 
-    const scaleX = originalVideoWidth / displayedVideoWidth;
-    const scaleY = originalVideoHeight / displayedVideoHeight;
-    console.log('[VideoRegionSelector] MouseUp: Scaling factors:', { scaleX, scaleY });
+    const scaleX = originalVideoWidth / displayedContentWidth;
+    const scaleY = originalVideoHeight / displayedContentHeight;
+    console.log('[VideoRegionSelector] MouseUp: Scaling factors (original/displayedContent):', { scaleX, scaleY });
 
     const finalCoords: SelectionCoordinates = {
-      x1: Math.round(x1_display * scaleX),
-      y1: Math.round(y1_display * scaleY),
-      x2: Math.round(x2_display * scaleX),
-      y2: Math.round(y2_display * scaleY),
+      x1: Math.round(x1_on_overlay * scaleX),
+      y1: Math.round(y1_on_overlay * scaleY),
+      x2: Math.round(x2_on_overlay * scaleX),
+      y2: Math.round(y2_on_overlay * scaleY),
     };
-    console.log('[VideoRegionSelector] MouseUp: Final Coords (scaled & rounded):', finalCoords);
+    console.log('[VideoRegionSelector] MouseUp: Final Coords (scaled & rounded to original video dimensions):', finalCoords);
     
     if (finalCoords.x1 >= finalCoords.x2 || finalCoords.y1 >= finalCoords.y2) {
         console.warn("[VideoRegionSelector] MouseUp: Selection resulted in zero or negative width/height after scaling. Resetting selection.");
@@ -171,7 +227,8 @@ export function VideoRegionSelector({
   };
 
   const currentSelectionStyle: React.CSSProperties = {};
-  if (startPoint && endPoint) {
+  if (startPoint && endPoint && displayedVideoMetrics) {
+    // These are relative to the overlayRef (active video area)
     currentSelectionStyle.left = `${Math.min(startPoint.x, endPoint.x)}px`;
     currentSelectionStyle.top = `${Math.min(startPoint.y, endPoint.y)}px`;
     currentSelectionStyle.width = `${Math.abs(endPoint.x - startPoint.x)}px`;
@@ -197,47 +254,60 @@ export function VideoRegionSelector({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="py-4 bg-muted flex items-center justify-center"> {/* Outer container for centering */}
-          {videoSrc && originalVideoWidth && originalVideoHeight && originalVideoHeight > 0 ? (
-            <div 
-              className="relative w-full max-w-[70vw] sm:max-w-[60vw] md:max-w-xl lg:max-w-2xl" // Responsive max width for the aspect container
-            >
-              {/* This inner div enforces the aspect ratio */}
-              <div 
-                style={{ 
-                  position: 'relative', 
-                  width: '100%', 
-                  paddingBottom: `${(1 / videoAspectRatio) * 100}%` // Dynamic aspect ratio
-                }}
-              >
-                {/* Overlay and VideoPlayer are absolutely positioned to fill the aspect ratio div */}
-                <div
-                  ref={overlayRef}
-                  className="absolute top-0 left-0 w-full h-full cursor-crosshair z-10"
-                  onMouseDown={handleMouseDown}
-                  onMouseMove={handleMouseMove}
-                  onMouseUp={handleMouseUp}
-                  onMouseLeave={() => { if(isDrawing) handleMouseUp(); }} 
-                >
-                  <VideoPlayer 
-                    src={videoSrc} 
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none" 
-                  />
-                  {startPoint && endPoint && Math.abs(endPoint.x - startPoint.x) > 0 && Math.abs(endPoint.y - startPoint.y) > 0 && (
-                    <div
-                      className="absolute border-2 border-dashed border-yellow-400 bg-yellow-400 bg-opacity-20 pointer-events-none"
-                      style={currentSelectionStyle}
-                    />
-                  )}
-                </div>
+        <div className="py-4 bg-muted flex items-center justify-center">
+          {/* Outer container with fixed aspect ratio (e.g., 16:9 using Tailwind's aspect-video) */}
+          <div 
+            ref={fixedAspectContainerRef}
+            className="relative w-full max-w-[70vw] sm:max-w-[60vw] md:max-w-xl lg:max-w-2xl aspect-video bg-black overflow-hidden"
+          >
+            {videoSrc && originalVideoWidth && originalVideoHeight ? (
+              <>
+                {/* VideoPlayer fills the fixed aspect container; object-contain handles letterboxing */}
+                <VideoPlayer 
+                  src={videoSrc} 
+                  className="absolute top-0 left-0 w-full h-full" // Player fills the 16:9 box
+                  onLoadedMetadata={handleVideoLoad} 
+                />
+                {/* Overlay for drawing, dynamically positioned over the visible video content */}
+                {displayedVideoMetrics ? (
+                  <div
+                    ref={overlayRef}
+                    className="absolute cursor-crosshair z-10" // Will capture mouse events
+                    style={{
+                      width: `${displayedVideoMetrics.width}px`,
+                      height: `${displayedVideoMetrics.height}px`,
+                      top: `${displayedVideoMetrics.offsetY}px`,
+                      left: `${displayedVideoMetrics.offsetX}px`,
+                    }}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={() => { if(isDrawing) handleMouseUp(); }} 
+                  >
+                    {/* Selection rectangle, drawn relative to this overlayRef */}
+                    {startPoint && endPoint && Math.abs(endPoint.x - startPoint.x) > 0 && Math.abs(endPoint.y - startPoint.y) > 0 && (
+                      <div
+                        className="absolute border-2 border-dashed border-yellow-400 bg-yellow-400 bg-opacity-20 pointer-events-none"
+                        style={currentSelectionStyle}
+                      />
+                    )}
+                  </div>
+                ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-black/70 pointer-events-none z-20">
+                        <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                        <p className="text-sm">Loading video preview & calculating dimensions...</p>
+                    </div>
+                )}
+              </>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="text-destructive p-4 text-center">
+                  Video preview or original dimensions unavailable. Cannot select region. <br />
+                  (Src: {videoSrc ? 'Available' : 'Missing'}, Width: {originalVideoWidth || 'Missing'}, Height: {originalVideoHeight || 'Missing'})
+                </p>
               </div>
-            </div>
-          ) : (
-            <p className="text-destructive p-4 text-center">
-              Video preview or original dimensions unavailable. Cannot select region. <br />
-              (Src: {videoSrc ? 'Available' : 'Missing'}, Width: {originalVideoWidth || 'Missing'}, Height: {originalVideoHeight || 'Missing'})
-            </p>
-          )}
+            )}
+          </div>
         </div>
         
         {selection && (
@@ -256,7 +326,7 @@ export function VideoRegionSelector({
             type="button"
             className="!bg-primary hover:!bg-primary/90 text-primary-foreground"
             onClick={handleConfirm}
-            disabled={isConfirmDisabled}
+            disabled={isConfirmDisabled || !displayedVideoMetrics}
           >
             Confirm Selection & Process
           </Button>
