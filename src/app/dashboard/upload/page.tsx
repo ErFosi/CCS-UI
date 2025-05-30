@@ -177,7 +177,7 @@ export default function UploadPage() {
       <Card className="w-full max-w-2xl mx-auto shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center">Upload Multimedia</CardTitle>
-          <CardDescription>Select an MP4 video (max {MAX_FILE_SIZE_MB}MB) for censoring, or an image.</CardDescription>
+          <CardDescription>Select an MP4 video (max ${MAX_FILE_SIZE_MB}MB) for censoring, or an image.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -207,14 +207,18 @@ export default function UploadPage() {
                 <span className="text-sm font-medium">
                   {file ? `Selected: ${file.name}` : "Click or Drag to Upload MP4 or Image"}
                 </span>
-                <span className="text-xs text-muted-foreground mt-1">Max {MAX_FILE_SIZE_MB}MB</span>
+                <span className="text-xs text-muted-foreground mt-1">Max ${MAX_FILE_SIZE_MB}MB</span>
               </Button>
             </div>
 
             {previewUrl && fileType === 'video' && (
               <div className="space-y-2">
                 <Label>Video Preview</Label>
-                <VideoPlayer src={previewUrl} onLoadedMetadata={handleVideoLoad} />
+                <VideoPlayer
+                  key={previewUrl}
+                  src={previewUrl}
+                  onLoadedMetadata={handleVideoLoad}
+                />
                 {videoMetadata && videoMetadata.width > 0 && videoMetadata.height > 0 ? (
                   <div className="flex items-center text-sm p-2 rounded-md bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200">
                     <Video className="h-4 w-4 mr-2 shrink-0" /> Video Resolution: {videoMetadata.width}x{videoMetadata.height}px. Ready for processing.
@@ -263,4 +267,3 @@ export default function UploadPage() {
     </div>
   );
 }
-
