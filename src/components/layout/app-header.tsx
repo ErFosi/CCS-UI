@@ -12,29 +12,31 @@ import { useAuth } from "@/context/auth-context";
 import { AccountDeletionDialog } from "@/components/auth/account-deletion-dialog";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { deleteAllUserVideosApi, setPreferenceApi } from "@/lib/apiClient"; // Import setPreferenceApi
+import { deleteAllUserVideosApi, setPreferenceApi } from "@/lib/apiClient"; 
 
 export function AppHeader() {
   const pathname = usePathname();
-  const { theme, toggleTheme: toggleThemeContext } = useTheme(); 
-  const { logout, user, getToken, isLoading: authIsLoading, isAuthenticated } = useAuth(); // Added isAuthenticated
+  const { theme, toggleTheme: toggleThemeContext, setTheme: setThemeFromContext } = useTheme(); 
+  const { logout, user, getToken, isLoading: authIsLoading, isAuthenticated } = useAuth();
   const { toast } = useToast();
   
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const handleToggleTheme = async () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
+    // Determine the new theme state *before* calling toggleThemeContext
+    const newThemeValue = theme === 'light' ? 'dark' : 'light';
     toggleThemeContext(); // This updates local state and localStorage
 
     if (isAuthenticated) {
       try {
         const token = await getToken();
         if (token) {
-          console.log(`[AppHeader] Attempting to save theme preference: ${newTheme} to backend.`);
-          await setPreferenceApi({ theme: newTheme }, token);
+          console.log(`[AppHeader] Attempting to save theme preference: ${newThemeValue} (darkTheme: ${newThemeValue === 'dark'}) to backend.`);
+          // Backend expects { darkTheme: boolean }
+          await setPreferenceApi({ darkTheme: newThemeValue === 'dark' }, token);
           // Optional: toast success for saving preference, though might be too noisy
-          // toast({ title: "Theme Saved", description: `Theme preference '${newTheme}' saved to server.` });
+          // toast({ title: "Theme Saved", description: `Theme preference '${newThemeValue}' saved to server.` });
         } else {
           console.warn("[AppHeader] Could not get token to save theme preference.");
         }

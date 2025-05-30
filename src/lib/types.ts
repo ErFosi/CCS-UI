@@ -22,7 +22,7 @@ export interface ProcessVideoApiResponse {
 
 // Defines the structure of user preferences fetched from AND sent to the API
 export interface UserPreference {
-  theme?: 'light' | 'dark';
+  darkTheme?: boolean; // Changed from theme: 'light' | 'dark'
   // Add other preference fields here if your API handles them
   // e.g., videoQuality?: 'auto' | '720p' | '1080p';
   // e.g., notificationsEnabled?: boolean;

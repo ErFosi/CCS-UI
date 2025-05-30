@@ -6,8 +6,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import getKeycloakInstance, { type UserProfile } from '@/lib/keycloak';
 import type Keycloak from 'keycloak-js';
 import { logTokenOnServer } from '@/lib/server-actions/auth-actions';
-import { getPreferenceApi } from '@/lib/apiClient'; // Import new API client function
-import { useTheme } from '@/context/theme-context'; // Import useTheme to set theme
+import { getPreferenceApi, UserPreference } from '@/lib/apiClient'; // Import UserPreference
+import { useTheme } from '@/context/theme-context';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
   const pathname = usePathname();
   const keycloakActualInitInvokedRef = useRef(false);
-  const { setTheme } = useTheme();
+  const { setTheme } = useTheme(); // Get setTheme from ThemeContext
 
   useEffect(() => {
     console.log('[CLIENT] AuthProvider:useEffect[] - Getting Keycloak instance.');
@@ -53,8 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const performInitialization = useCallback(async (kcInstance: Keycloak) => {
     console.log(`[CLIENT] AuthProvider:performInitialization - Starting for path: ${pathname}`);
-    setIsLoading(true); // Set loading true at the start of initialization attempt
-
+    setIsLoading(true);
     let initOptions: Keycloak.KeycloakInitOptions = {};
     let authenticatedByInit = false;
 
@@ -78,7 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.log(`[CLIENT] AuthProvider:performInitialization - keycloak.init() with PRE-OBTAINED TOKENS returned: ${authenticatedByInit}`);
         console.log(`[CLIENT] AuthProvider:performInitialization - AFTER init with tokens, kcInstance.authenticated is: ${kcInstance.authenticated}`);
         
-        clearDagTokens(); // Clear tokens after attempting to use them
+        clearDagTokens();
 
         if (!kcInstance.authenticated) {
             console.warn("[CLIENT] AuthProvider:performInitialization - Init with stored tokens did NOT result in authenticated state.");
@@ -96,7 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const currentAuthStatus = !!kcInstance.authenticated;
-      setIsAuthenticated(currentAuthStatus); // Update React state
+      setIsAuthenticated(currentAuthStatus);
       console.log(`[CLIENT] AuthProvider:performInitialization - isAuthenticated state set to: ${currentAuthStatus}`);
 
       if (currentAuthStatus) {
@@ -110,13 +109,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             try {
               console.log('[CLIENT] AuthProvider:performInitialization - Fetching user preferences...');
-              const preferences = await getPreferenceApi(kcInstance.token);
+              const preferences: UserPreference = await getPreferenceApi(kcInstance.token);
               console.log('[CLIENT] AuthProvider:performInitialization - User preferences received:', preferences);
-              if (preferences && preferences.theme) {
-                console.log(`[CLIENT] AuthProvider:performInitialization - Applying theme from preferences: ${preferences.theme}`);
-                setTheme(preferences.theme);
+              if (preferences && typeof preferences.darkTheme === 'boolean') {
+                const newTheme = preferences.darkTheme ? 'dark' : 'light';
+                console.log(`[CLIENT] AuthProvider:performInitialization - Applying theme from API preferences: ${newTheme} (darkTheme: ${preferences.darkTheme})`);
+                setTheme(newTheme);
+              } else if (preferences && preferences.hasOwnProperty('theme') && typeof (preferences as any).theme === 'string') {
+                // Fallback for old theme string if API hasn't updated yet, can be removed later
+                const oldTheme = (preferences as any).theme === 'dark' ? 'dark' : 'light';
+                 console.log(`[CLIENT] AuthProvider:performInitialization - Applying theme from old API 'theme' string: ${oldTheme}`);
+                setTheme(oldTheme);
               } else {
-                console.log('[CLIENT] AuthProvider:performInitialization - No theme preference found in API response.');
+                console.log('[CLIENT] AuthProvider:performInitialization - No darkTheme boolean preference found in API response.');
               }
             } catch (prefError) {
               console.error("[CLIENT] AuthProvider:performInitialization - Error fetching user preferences:", prefError);
@@ -132,7 +137,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         console.log('[CLIENT] AuthProvider:performInitialization - User IS NOT effectively authenticated after this run.');
         setUser(null);
-        // if (storedAccessToken) clearDagTokens(); // Already cleared above if tokens were present
       }
     } catch (error: any) {
       console.error("[CLIENT] AuthProvider:performInitialization - Outer catch block error during Keycloak initialization.", error);
@@ -148,16 +152,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(false);
       console.log(`[CLIENT] AuthProvider:performInitialization - Initialization process finished. isLoading: ${isLoading} isAuthenticated (state): ${isAuthenticated} keycloak.authenticated (instance): ${keycloak?.authenticated}`);
     }
-  }, [pathname, setTheme]); // Added setTheme
+  }, [pathname, setTheme]);
 
   useEffect(() => {
     if (keycloak && !keycloakActualInitInvokedRef.current) {
       console.log(`[CLIENT] AuthProvider:useEffect[keycloak] - Keycloak instance available and init not yet invoked. Path: ${pathname}. Calling performInitialization.`);
-      keycloakActualInitInvokedRef.current = true; // Set flag BEFORE calling init
+      keycloakActualInitInvokedRef.current = true;
       performInitialization(keycloak);
     } else if (keycloak && keycloakActualInitInvokedRef.current) {
-      // This block handles route changes after initial init was already attempted.
-      // We mainly want to ensure isLoading is false and sync React state if needed.
       console.log(`[CLIENT] AuthProvider:useEffect[keycloak] - Init already attempted or in progress. Path: ${pathname}. Current kc.auth: ${keycloak.authenticated}. Syncing React state if needed.`);
       const currentAuthStatus = !!keycloak.authenticated;
       if (isAuthenticated !== currentAuthStatus) {
@@ -168,7 +170,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.log("[CLIENT] AuthProvider:useEffect[keycloak] - Authenticated but no user object, attempting to load profile.");
         keycloak.loadUserProfile().then(profile => setUser(profile as UserProfile)).catch(() => {
           console.error("[CLIENT] AuthProvider:useEffect[keycloak] - Failed to load profile for already authenticated user.");
-          setIsAuthenticated(false); // Revert if profile load fails
+          setIsAuthenticated(false);
           setUser(null);
           if(keycloak.token) keycloak.clearToken();
           clearDagTokens();
@@ -177,12 +179,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(null);
         console.log("[CLIENT] AuthProvider:useEffect[keycloak] - Not authenticated but user object exists, clearing user.");
       }
-      if (isLoading) { // Ensure loading is false if init was already attempted
+       if (isLoading && keycloakActualInitInvokedRef.current) {
         setIsLoading(false);
         console.log("[CLIENT] AuthProvider:useEffect[keycloak] - Setting isLoading to false as init was already attempted.");
       }
     }
-  }, [keycloak, pathname, performInitialization, isAuthenticated, user, isLoading]); // Added isAuthenticated, user, isLoading
+  }, [keycloak, pathname, performInitialization, isAuthenticated, user, isLoading]);
 
   useEffect(() => {
     if (!keycloak) {
@@ -202,13 +204,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (keycloak.token) {
             logTokenOnServer(keycloak.token).catch(e => console.error("[CLIENT] Keycloak EVENT: onAuthSuccess - Error calling logTokenOnServer:", e));
             console.log('[CLIENT] Keycloak EVENT: onAuthSuccess - Fetching user preferences...');
-            const preferences = await getPreferenceApi(keycloak.token);
+            const preferences: UserPreference = await getPreferenceApi(keycloak.token);
             console.log('[CLIENT] Keycloak EVENT: onAuthSuccess - User preferences received:', preferences);
-            if (preferences && preferences.theme) {
-              console.log(`[CLIENT] Keycloak EVENT: onAuthSuccess - Applying theme from preferences: ${preferences.theme}`);
-              setTheme(preferences.theme);
+            if (preferences && typeof preferences.darkTheme === 'boolean') {
+              const newTheme = preferences.darkTheme ? 'dark' : 'light';
+              console.log(`[CLIENT] Keycloak EVENT: onAuthSuccess - Applying theme from API preferences: ${newTheme} (darkTheme: ${preferences.darkTheme})`);
+              setTheme(newTheme);
+            } else if (preferences && preferences.hasOwnProperty('theme') && typeof (preferences as any).theme === 'string') {
+               const oldTheme = (preferences as any).theme === 'dark' ? 'dark' : 'light';
+               console.log(`[CLIENT] Keycloak EVENT: onAuthSuccess - Applying theme from old API 'theme' string: ${oldTheme}`);
+               setTheme(oldTheme);
             } else {
-              console.log('[CLIENT] Keycloak EVENT: onAuthSuccess - No theme preference found in API response.');
+              console.log('[CLIENT] Keycloak EVENT: onAuthSuccess - No darkTheme boolean preference found in API response.');
             }
           }
         } catch (err) {
@@ -222,7 +229,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(null);
         setIsAuthenticated(false);
       }
-      setIsLoading(false); // Ensure loading is false after auth success
+      setIsLoading(false);
     };
 
     const onAuthError = (errorData?: Keycloak.KeycloakError) => {
@@ -285,12 +292,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     };
 
-    keycloak.onAuthSuccess = onAuthSuccess;
-    keycloak.onAuthError = onAuthError;
-    keycloak.onAuthRefreshSuccess = onAuthRefreshSuccess;
-    keycloak.onAuthRefreshError = onAuthRefreshError;
-    keycloak.onAuthLogout = onAuthLogout;
-    keycloak.onTokenExpired = onTokenExpired;
+    kcInstance.onAuthSuccess = onAuthSuccess;
+    kcInstance.onAuthError = onAuthError;
+    kcInstance.onAuthRefreshSuccess = onAuthRefreshSuccess;
+    kcInstance.onAuthRefreshError = onAuthRefreshError;
+    kcInstance.onAuthLogout = onAuthLogout;
+    kcInstance.onTokenExpired = onTokenExpired;
     console.log('[CLIENT] AuthProvider:useEffect[event handlers] - Keycloak event handlers successfully registered.');
 
     return () => {
@@ -304,7 +311,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             keycloak.onTokenExpired = undefined;
         }
     };
-  }, [keycloak, setTheme]); // Added setTheme
+  }, [keycloak, setTheme]); // Added setTheme dependency
 
   const login = useCallback(async (options?: Keycloak.KeycloakLoginOptions) => {
     if (keycloak) {
@@ -381,5 +388,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-    
