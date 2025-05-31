@@ -43,13 +43,19 @@ This is the Next.js frontend application for SecureGuard AI, an AI-powered video
     Create a `.env.local` file in the root of the project. This file is used for local development.
     ```env
     # Example for client-side API URL (replace with your actual backend URL)
-    NEXT_PUBLIC_API_URL=http://localhost:8080/api
+    NEXT_PUBLIC_FASTAPI_URL=http://localhost:8000 
 
     # Example for Genkit Google AI (replace with your actual key)
     GOOGLE_API_KEY=your_google_api_key
+
+    # Keycloak variables
+    NEXT_PUBLIC_KEYCLOAK_URL=http://localhost:8080
+    NEXT_PUBLIC_KEYCLOAK_REALM=myrealm
+    NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=myclient
     ```
-    - `NEXT_PUBLIC_API_URL`: The URL for your backend API. This is embedded in the client-side code at build time.
+    - `NEXT_PUBLIC_FASTAPI_URL`: The URL for your backend API. This is embedded in the client-side code at build time.
     - `GOOGLE_API_KEY`: Required if you are using Genkit flows that interact with Google AI services.
+    - `NEXT_PUBLIC_KEYCLOAK_URL`, `NEXT_PUBLIC_KEYCLOAK_REALM`, `NEXT_PUBLIC_KEYCLOAK_CLIENT_ID`: Keycloak configuration for authentication.
 
 4.  **Run the development server:**
     ```bash
@@ -72,33 +78,36 @@ This application includes a `Dockerfile` for easy containerization. The Docker b
     From the root of the project, run:
     ```bash
     docker build -t secureguard-ai-ui \
-      --build-arg NEXT_PUBLIC_API_URL="http://your-production-backend-api-url.com" \
+      --build-arg NEXT_PUBLIC_FASTAPI_URL="http://your-production-backend-api-url.com" \
       --build-arg GOOGLE_API_KEY="your_production_google_api_key_for_build" \
+      --build-arg NEXT_PUBLIC_KEYCLOAK_URL="https://your-keycloak-url.com" \
+      --build-arg NEXT_PUBLIC_KEYCLOAK_REALM="your-keycloak-realm" \
+      --build-arg NEXT_PUBLIC_KEYCLOAK_CLIENT_ID="your-keycloak-client-id" \
       .
     ```
-    - Replace URLs and keys with your actual production values. `NEXT_PUBLIC_API_URL` will be baked into the client-side JavaScript. `GOOGLE_API_KEY` is passed here in case the build process itself needs it (e.g., for Genkit schema generation or validation).
+    - Replace URLs and keys with your actual production values. `NEXT_PUBLIC_FASTAPI_URL` and Keycloak URLs will be baked into the client-side JavaScript. `GOOGLE_API_KEY` is passed here in case the build process itself needs it.
 
 2.  **Run the Docker container:**
     ```bash
-    docker run -p 3000:3000 \
+    docker run -p 8000:8000 \
            -e GOOGLE_API_KEY="your_production_google_api_key_for_runtime" \
            secureguard-ai-ui
     ```
-    - The application inside the container will run on port 3000.
-    - `-p 3000:3000` maps port 3000 of the container to port 3000 on your host.
-    - `-e GOOGLE_API_KEY`: This sets the Google API key at runtime, which is necessary for server-side Genkit flows that run within the Next.js server (e.g., via Server Actions).
+    - The application inside the container will run on port 8000.
+    - `-p 8000:8000` maps port 8000 of the container to port 8000 on your host.
+    - `-e GOOGLE_API_KEY`: This sets the Google API key at runtime, which is necessary for server-side Genkit flows that run within the Next.js server.
 
-    The application will be accessible on your host at `http://localhost:3000`.
+    The application will be accessible on your host at `http://localhost:8000`.
 
 ## Backend Integration
 
 This UI is designed to communicate with a backend service responsible for:
-- Actual user authentication and session management.
+- Actual user authentication and session management (Keycloak).
 - Securely storing user data and videos.
 - Performing the AI-powered video censoring operations.
 - Managing subscriptions and premium features.
 
-The backend URL should be configured using the `NEXT_PUBLIC_API_URL` environment variable, provided at build time for Docker images or in `.env.local` for local development.
+The backend URL should be configured using the `NEXT_PUBLIC_FASTAPI_URL` environment variable, provided at build time for Docker images or in `.env.local` for local development.
 
 ## Project Structure
 
@@ -110,10 +119,9 @@ The backend URL should be configured using the `NEXT_PUBLIC_API_URL` environment
     -   `src/components/videos/`: Video related components.
 -   `src/ai/`: Genkit related code.
     -   `src/ai/flows/`: Genkit flow definitions.
--   `src/context/`: React context providers (Theme, Video).
--   `src/lib/`: Utility functions, type definitions, server actions.
+-   `src/context/`: React context providers (Theme, Video, Auth).
+-   `src/lib/`: Utility functions, type definitions, server actions, API client.
 -   `public/`: Static assets (e.g., images, logos).
 -   `Dockerfile`: For building the production Docker image.
 -   `.dockerignore`: Specifies files to exclude from the Docker build context.
 -   `next.config.ts`: Next.js configuration, including `output: 'standalone'`.
-```

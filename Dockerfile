@@ -1,52 +1,53 @@
-# Dockerfile
+# 1. Base image for Node.js
+FROM node:20-alpine AS base
 
-# Stage 1: Build the application
-FROM node:20-alpine AS builder
+# 2. Dependencies installation stage
+FROM base AS deps
 WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci
 
-# Copy package.json and package-lock.json (if available)
-COPY package*.json ./
-RUN npm install
-
-# Copy the rest of the application code
+# 3. Builder stage: Build the Next.js application
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Define build arguments for environment variables required at build time
-# These will be baked into the client-side JavaScript bundles or used by the build process.
+# Environment variables for the build
+# NEXT_PUBLIC_API_URL is passed as a build argument
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
+# GOOGLE_API_KEY can also be passed if needed during build
 ARG GOOGLE_API_KEY
 ENV GOOGLE_API_KEY=${GOOGLE_API_KEY}
+# Add NEXT_PUBLIC_KEYCLOAK_URL, NEXT_PUBLIC_KEYCLOAK_REALM, NEXT_PUBLIC_KEYCLOAK_CLIENT_ID as build arguments
+ARG NEXT_PUBLIC_KEYCLOAK_URL
+ENV NEXT_PUBLIC_KEYCLOAK_URL=${NEXT_PUBLIC_KEYCLOAK_URL}
+ARG NEXT_PUBLIC_KEYCLOAK_REALM
+ENV NEXT_PUBLIC_KEYCLOAK_REALM=${NEXT_PUBLIC_KEYCLOAK_REALM}
+ARG NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
+ENV NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=${NEXT_PUBLIC_KEYCLOAK_CLIENT_ID}
+ARG NEXT_PUBLIC_FASTAPI_URL
+ENV NEXT_PUBLIC_FASTAPI_URL=${NEXT_PUBLIC_FASTAPI_URL}
 
-# Build the Next.js application
-# The `output: 'standalone'` in next.config.ts will prepare the app for this.
+
 RUN npm run build
 
-# Stage 2: Production environment
-FROM node:20-alpine
+# 4. Runner stage: Production image
+FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
+# Set the port the Next.js app will run on inside the container
+ENV PORT=8000
 
-# Copy the standalone output from the builder stage
-# This includes only the necessary files to run the application
-COPY --from=builder /app/.next/standalone ./
-
-# Copy the public folder from the build stage
+# Copy the standalone Next.js output
 COPY --from=builder /app/public ./public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
-# Copy the static assets from .next/static (needed for standalone output)
-COPY --from=builder /app/.next/static ./.next/static
+# Expose the port the app runs on
+EXPOSE 8000
 
-# Expose the port the app runs on (default 3000 for Next.js standalone)
-EXPOSE 3000
-
-# Set runtime environment variables.
-# GOOGLE_API_KEY is needed at runtime for server-side Genkit flows.
-# This should be provided when running the container, e.g., `docker run -e GOOGLE_API_KEY=your_key ...`
-# ENV GOOGLE_API_KEY will be set by the `docker run -e` command.
-
-# Command to run the application
-# The standalone output includes a server.js file to start the server.
+# Run the Next.js app
 CMD ["node", "server.js"]
