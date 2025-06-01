@@ -1,3 +1,4 @@
+
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
@@ -18,9 +19,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  serverActions: {
-    bodySizeLimit: '50mb', // Increase body size limit for Server Actions
-  },
+  // serverActions: { // Removed this block as it causes "Unrecognized key(s)" error
+  //   bodySizeLimit: '50mb', 
+  // },
 };
 
 export default nextConfig;
