@@ -146,17 +146,17 @@ export async function processVideoApi(
 ): Promise<ProcessVideoApiResponse> {
   console.log(`[API_CLIENT - BROWSER] processVideoApi called for filename: ${filename} with coordinates:`, coordinates);
   
-  const formData = new FormData();
-  // Backend expects 'filename' as a string for already uploaded files on S3.
-  formData.append('filename', filename); 
-  formData.append('x1', coordinates.x1.toString());
-  formData.append('y1', coordinates.y1.toString());
-  formData.append('x2', coordinates.x2.toString());
-  formData.append('y2', coordinates.y2.toString());
+  const payload = {
+    filename: filename,
+    x1: coordinates.x1,
+    y1: coordinates.y1,
+    x2: coordinates.x2,
+    y2: coordinates.y2,
+  };
 
   return fetchWithAuth<ProcessVideoApiResponse>('/process', {
     method: 'POST',
-    body: formData, 
+    body: JSON.stringify(payload), 
     token,
     responseType: 'json',
   });
@@ -202,3 +202,4 @@ export async function setPreferenceApi(
     responseType: 'json' 
   });
 }
+
